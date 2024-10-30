@@ -7,7 +7,6 @@ interface Session {
     id: string;
     email: string;
     password: string;
-    durationMonths: number;
     endDate: Date;
 }
 
