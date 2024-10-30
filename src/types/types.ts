@@ -4,10 +4,10 @@ type TelegramNickname = string;
 type TelegramMessage = string;
 
 interface Session {
-    id: string;
-    email: string;
-    password: string;
-    endDate: Date;
+    id(): Promise<string>;
+    email(): Promise<string>;
+    password(): Promise<string>;
+    endDate(): Promise<Date>;
 }
 
 interface Users {
