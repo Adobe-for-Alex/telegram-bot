@@ -1,21 +1,15 @@
 type TelegramId = string;
 type ChatId = string;
+type TelegramNickname = string;
+type TelegramMessage = string;
 
 interface Session {
     id: string;
     email: string;
     password: string;
-    expiresAt: Date;
-}
-
-interface Subscription {
-    id: string;
     durationMonths: number;
-    status: 'active' | 'expired' | 'pending';
-    startDate: Date;
     endDate: Date;
 }
-
 
 interface Users {
     register(id: TelegramId, chat: ChatId): Promise<User>;
@@ -24,11 +18,17 @@ interface Users {
 }
 
 interface User {
-    id(): Promise<TelegramId>;
+    name(): Promise<TelegramNickname>
 
-    session(): Promise<Session>;
+    subscription(): Promise<Session | undefined>;
+}
 
-    subscription(): Promise<Subscription | undefined>;
+interface Payment {
+    user(): Promise<User>
+
+    receipt(): Promise<File>
+
+    asMessage(): Promise<TelegramMessage>
 }
 
 interface Service {
@@ -37,16 +37,11 @@ interface Service {
     updateSession(sessionId: string, email: string, password: string): Promise<void>;
 }
 
-interface SubscriptionService {
-    createSubscription(userId: TelegramId, durationMonths: number): Promise<Subscription>;
 
-    updateSubscriptionStatus(subscriptionId: string, status: 'active' | 'expired' | 'pending'): Promise<void>;
-
-    getSubscription(userId: TelegramId): Promise<Subscription | undefined>;
+interface Admin {
+    requestPaymentVerification(payment: Payment): Promise<'approved' | 'rejected'>
 }
 
-interface AdminService {
-    verifyPayment(userId: TelegramId, paymentProof: string): Promise<'approved' | 'rejected'>;
-
-    notifyAdmin(userId: TelegramId, reason: string): Promise<void>;
+interface Admins {
+    anyNotBusy(): Promise<Admin>
 }
