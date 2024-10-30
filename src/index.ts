@@ -1,5 +1,5 @@
 import express from 'express'
-import { Telegraf } from 'telegraf'
+import {Telegraf} from 'telegraf'
 
 const app = express()
 app.get('/', async (req, res, next) => {

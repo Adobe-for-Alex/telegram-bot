@@ -1,3 +1,3 @@
 interface Price {
-    amount(): Promise<number>;
+  amount(): Promise<number>;
 }
