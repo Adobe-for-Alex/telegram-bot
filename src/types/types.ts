@@ -20,8 +20,13 @@ interface User {
     name(): Promise<TelegramNickname>
 
     subscription(): Promise<Session | undefined>;
+
+    send(): Promise<void>;
 }
 
+interface Message {
+    asString(): Promise<string>;
+}
 
 
 interface Price {
@@ -29,6 +34,7 @@ interface Price {
 
    amount(): Promise<number>;
 
+   discountedAmount(): Promise<number>;
 }
 
 interface Payment {
@@ -36,7 +42,7 @@ interface Payment {
 
     receipt(): Promise<File>
 
-    asMessage(): Promise<TelegramMessage>
+    asMessage(): Promise<Message>
 
     price(): Promise<Price>;
 }
@@ -46,7 +52,7 @@ interface Service {
 
     updateSession(sessionId: string, email: string, password: string): Promise<void>;
 
-    createSession(userId: TelegramId, duration: number): Promise<Session>; // создание новой подписки
+    createSession(userId: TelegramId, duration: number): Promise<Session>; 
 }
 
 
