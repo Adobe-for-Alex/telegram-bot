@@ -1,7 +1,6 @@
 import Admin from "../admin/Admin";
 
-interface Admins {
+export default interface Admins {
   anyNotBusy(): Promise<Admin>
 }
 
-export default Admins;

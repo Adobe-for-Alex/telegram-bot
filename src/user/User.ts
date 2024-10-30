@@ -1,6 +1,7 @@
 import Message from "../message/Message";
+import Session from "../session/Session";
 
-interface User {
+export default interface User {
   message: Message
   name(): Promise<TelegramNickname>
   session(): Promise<Session>
@@ -8,4 +9,3 @@ interface User {
   answer(): Promise<Message>
 }
 
-export default User;

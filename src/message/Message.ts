@@ -1,9 +1,8 @@
 import {Context} from "telegraf";
 
-interface Message {
+export default interface Message {
   asString(): Promise<string>
   send(context: Context): Promise<void>;
 
 }
 
-export default Message;

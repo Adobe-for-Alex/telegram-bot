@@ -1,7 +1,6 @@
 import Payment from "../payment/Payment";
 
-interface Admin {
+export default interface Admin {
   approve(payment: Payment): Promise<Payment>
 }
 
-export default Admin;

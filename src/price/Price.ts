@@ -1,3 +1,3 @@
-interface Price {
+export default interface Price {
   amount(): Promise<number>;
 }

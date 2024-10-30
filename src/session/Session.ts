@@ -1,4 +1,4 @@
-interface Session {
+export default interface Session {
   email(): Promise<string>;
   password(): Promise<string>;
   expired(): Promise<Date>;
