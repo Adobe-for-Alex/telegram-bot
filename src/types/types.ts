@@ -22,18 +22,31 @@ interface User {
     subscription(): Promise<Session | undefined>;
 }
 
+
+
+interface Price {
+   discount(): Promise<number>;
+
+   amount(): Promise<number>;
+
+}
+
 interface Payment {
     user(): Promise<User>
 
     receipt(): Promise<File>
 
     asMessage(): Promise<TelegramMessage>
+
+    price(): Promise<Price>;
 }
 
 interface Service {
     users(): Promise<Users>;
 
     updateSession(sessionId: string, email: string, password: string): Promise<void>;
+
+    createSession(userId: TelegramId, duration: number): Promise<Session>; // создание новой подписки
 }
 
 
