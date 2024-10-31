@@ -1,8 +1,9 @@
-import {Context} from "telegraf";
-
 export default interface Message {
-  asString(): Promise<string>
-  send(context: Context): Promise<void>;
-
+  send(context: Chat): Promise<void>;
 }
 
+export interface Chat {
+  sendText(message: string): Promise<void>;
+  sendImage(imageUrl: string): Promise<void>;
+  sendFile(fileUrl: string): Promise<void>;
+}
