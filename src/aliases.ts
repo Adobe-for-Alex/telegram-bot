@@ -1,3 +1,3 @@
-export type TelegramId = string;
-export type ChatId = string;
-export type TelegramNickname = string;
+export type TelegramId = string
+export type ChatId = string
+export type TelegramNickname = string

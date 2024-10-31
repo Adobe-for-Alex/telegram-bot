@@ -5,6 +5,6 @@ import {TelegramNickname} from "../aliases";
 export default interface User {
   name(): Promise<TelegramNickname>
   session(): Promise<Session>
-  send(message: Message): Promise<void>;
+  send(message: Message): Promise<void>
   answer(): Promise<Message>
 }
