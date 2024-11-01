@@ -1,6 +1,8 @@
+import Account from "../account/Account"
+
 export default interface Session {
-  email(): Promise<string>
-  password(): Promise<string>
+  account(): Promise<Account>
+  updateAccount(account: Account): Promise<void>
   expired(): Promise<Date>
   extendTo(date: Date): Promise<void>
 }
