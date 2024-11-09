@@ -12,3 +12,90 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  /// Telegram ID.
+  id            Int            @id
+  /// Howe to name the user in chat.
+  /// This could be the username, firstname and secondname or other name from Telegram.
+  name          String
+  /// Stage of chat with user.
+  stage         String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  admin         Admin?
+  payments      Payment[]
+  subscriptions Subscription[]
+  sessions      Session[]
+}
+
+model Admin {
+  userId   Int                   @id @unique
+  user     User                  @relation(fields: [userId], references: [id])
+  requests CheckPaymentRequest[]
+}
+
+model Plan {
+  id               Int       @id @default(autoincrement())
+  durationInMonths Int
+  price            Float
+  secret           Boolean
+  payments         Payment[]
+}
+
+model Payment {
+  id           Int                  @id @default(autoincrement())
+  userId       Int
+  planId       Int
+  /// Contain part of full URL to Telegram file
+  receiptUrl   String
+  createdAt    DateTime             @default(now())
+  user         User                 @relation(fields: [userId], references: [id])
+  plan         Plan                 @relation(fields: [planId], references: [id])
+  checkRequest CheckPaymentRequest?
+}
+
+model CheckPaymentRequest {
+  paymentId Int      @id
+  adminId   Int
+  createdAt DateTime @default(now())
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  admin     Admin    @relation(fields: [adminId], references: [userId])
+  approve   Approve?
+  reject    Reject?
+}
+
+model Approve {
+  requestId    Int                 @id
+  createdAt    DateTime            @default(now())
+  request      CheckPaymentRequest @relation(fields: [requestId], references: [paymentId])
+  subscription Subscription?
+}
+
+model Reject {
+  requestId Int                 @id
+  reason    String
+  createdAt DateTime            @default(now())
+  request   CheckPaymentRequest @relation(fields: [requestId], references: [paymentId])
+}
+
+model Subscription {
+  approveId Int      @id @unique
+  userId    Int
+  expiredAt DateTime
+  createdAt DateTime @default(now())
+  approve   Approve  @relation(fields: [approveId], references: [requestId])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Session {
+  /// Session ID from subscription-service
+  id        String   @id
+  userId    Int
+  email     String
+  password  String
+  deleted   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+}
