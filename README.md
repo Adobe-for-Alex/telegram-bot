@@ -86,7 +86,7 @@ $ pnpm dev
 
 # Основные технологии
 
-- [Telegraf](https://www.npmjs.com/package/telegraf)
+- [Grammy](https://www.npmjs.com/package/grammy)
 - [Express](https://www.npmjs.com/package/express)
 - [Prisma](https://www.npmjs.com/package/prisma)
 
