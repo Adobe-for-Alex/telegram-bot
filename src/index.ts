@@ -1,169 +1,135 @@
-import express from 'express'
-import { Context, Markup, session, Telegraf } from 'telegraf'
+import { Menu, MenuRange } from "@grammyjs/menu"
+import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
 
-const app = express()
-app.get('/', async (req, res, next) => {
-  const name = req.query['name']
-  res.send(name ? `Hello Mr. ${name}` : 'Hello World!')
-  next()
+type PlanId = number
+type UserId = number
+type MessageId = number
+type SubscrptionId = number
+
+interface Plan {
+  id(): Promise<PlanId>
+  extendSubscrptionFor(user: User): Promise<void>
+  asString(): Promise<string>
+}
+
+interface Plans {
+  all(): Promise<Plan[]>
+  withId(id: PlanId): Promise<Plan | undefined>
+}
+
+interface Subscrption {
+  id(): Promise<SubscrptionId>
+  ended(): Promise<Date>
+  asString(): Promise<string>
+}
+
+interface User {
+  id(): Promise<UserId>
+  name(): Promise<string>
+  subscrption(): Promise<Subscrption | undefined>
+}
+
+interface Users {
+  withId(id: UserId): Promise<User>
+}
+
+interface Admin {
+  requestCheck(plan: Plan, user: User, messageId: MessageId): Promise<void>
+}
+
+interface Admins {
+  any(): Promise<Admin>
+}
+
+interface Session {
+  planId?: PlanId
+}
+type ContextWithSession = Context & SessionFlavor<Session>
+
+const rawPlans = [
+  [1, '1 месяц - $2'],
+  [3, '3 месяц - $5'],
+  [6, '6 месяц - $10'],
+] as const
+const adoptPlan = (id: number, raw: readonly [number, string]): Plan => ({
+  id: async () => id,
+  extendSubscrptionFor: async () => { },
+  asString: async () => raw[1]
 })
-app.listen(8080, () => console.log('Server started'))
+const plans: Plans = {
+  all: async () => rawPlans.map((x, i) => adoptPlan(i, x)),
+  withId: async (id: PlanId) => rawPlans[id] ? adoptPlan(id, rawPlans[id]) : undefined
+}
+
+const admins = {} as Admins
+const users = {} as Users
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
-const adminsInEnv = process.env['ADMINS']
-if (!adminsInEnv) throw new Error('ADMINS is undefined or empty')
-const admins: UserId[] = adminsInEnv.split(',').map(Number)
-const anyAdmin = () => {
-  for (const admin of admins) {
-    if (admin in approoveRequests) continue
-    return admin
-  }
-  return undefined
-}
+const bot = new Bot<ContextWithSession>(token)
+bot.use(session())
 
-type Stage = 'new'
-  | 'no-subscription'
-  | 'choosing-plan'
-  | 'choose-1-month'
-  | 'choose-3-months'
-  | 'choose-6-months'
-  | 'wait-approove'
-  | 'with-subscription'
+const newSubscrptionMenu = new Menu<ContextWithSession>('new-subscription')
+  .dynamic(async () => {
+    const range = new MenuRange<ContextWithSession>()
+    for (const plan of await plans.all()) {
+      range.text(await plan.asString(), async ctx => {
+        await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
+        ctx.session.planId = await plan.id()
+      }).row()
+    }
+    return range
+  })
+bot.use(newSubscrptionMenu.middleware())
 
-interface ContextWithSession extends Context {
-  session: {
-    stage: Stage
-  }
-}
-
-type Plan = {
-  price: number,
-  monthsDuration: number,
-  action: string,
-  stage: Stage
-}
-const plans: Plan[] = [
-  {
-    price: 2,
-    monthsDuration: 1,
-    action: 'subscribe-months-1',
-    stage: 'choose-1-month'
-  },
-  {
-    price: 5,
-    monthsDuration: 3,
-    action: 'subscribe-months-3',
-    stage: 'choose-3-months'
-  },
-  {
-    price: 2,
-    monthsDuration: 6,
-    action: 'subscribe-months-6',
-    stage: 'choose-6-months'
-  },
-]
-
-const bot = new Telegraf<ContextWithSession>(token)
-bot.use(session({ defaultSession: () => ({ stage: <Stage>'new' }) }))
-
-const stageStep = <C extends ContextWithSession>
-  (expect: Stage, success: Stage) =>
-  async (ctx: C, next: () => Promise<void>): Promise<void> => {
-    if (ctx.session.stage !== expect) return
-    ctx.session.stage = success
-    return next()
-  }
-
-bot.start(stageStep('new', 'no-subscription'), async ctx => {
+bot.command('start', async ctx => {
   await ctx.reply(
     'Привет! Добро пожаловать в наш сервис.',
     {
-      reply_markup: {
-        keyboard: [
-          [Markup.button.text('Оформить подписку')],
-        ],
-        resize_keyboard: true
-      }
+      reply_markup: new Keyboard()
+        .text('Текущая подписка').row()
+        .text('Продлить подписку').row()
+        .resized()
     }
   )
 })
 
-bot.hears('Оформить подписку', stageStep('no-subscription', 'choosing-plan'), async ctx => {
-  await ctx.reply(
-    'Отлично! Давайте оформим подписку. Какой период вас интересует?',
-    {
-      reply_markup: {
-        inline_keyboard: [
-          plans.map(x => Markup.button.callback(`${x.monthsDuration} месяцев - $${x.price}`, x.action))
-        ],
-        keyboard: []
-      }
-    })
-})
-
-plans.forEach(plan => bot.action(plan.action, stageStep('choosing-plan', plan.stage), async ctx => {
-  await ctx.editMessageReplyMarkup({ inline_keyboard: [] })
-  await ctx.reply(`Вы выбрали подписку на ${plan.monthsDuration} месяцев.
-Стоимость: $${plan.price}
-
-Пожалуйста, вышлите мне чек оплаты в виде файла.
-Реквизиты для оплаты: <реквизиты>`
-  )
-}))
-
-type UserId = number
-type MessageId = number
-const payments: Record<UserId, MessageId> = {}
-
-type Price = number
-type Payment = {
-  user: UserId,
-  receipt: MessageId,
-  price: Price
-}
-const approoveRequests: Record<UserId, Payment> = {}
-
-plans.forEach(plan => bot.on('document', stageStep(plan.stage, 'wait-approove'), async ctx => {
-  payments[ctx.message.from.id] = ctx.message.message_id
-  const admin = anyAdmin()
-  if (!admin) {
-    await ctx.reply('К сожалению сейчас нету доступных администраторов для проверки вашего чека. Попробуйте позже.')
+bot.hears('Текущая подписка', async ctx => {
+  if (ctx.from === undefined) return
+  const user = await users.withId(ctx.from.id)
+  const subscrption = await user.subscrption()
+  if (subscrption === undefined || await subscrption.ended() < new Date()) {
+    await ctx.reply('У вас сейчас нету подписки')
     return
   }
-  approoveRequests[admin] = {
-    user: ctx.message.from.id,
-    receipt: ctx.message.message_id,
-    price: plan.price
-  }
-  await ctx.forwardMessage(admin)
-  await ctx.telegram.sendMessage(
-    admin,
-    `Пользователь ${ctx.message.from.username || ctx.message.from.id} отправил чек оплаты на сумму $${plan.price}`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('Принять', 'approove'), Markup.button.callback('Отклонить', 'reject')]
-    ])
+  await ctx.reply(await subscrption.asString())
+})
+
+bot.hears('Продлить подписку', async ctx => {
+  await ctx.reply(
+    'Отлично! Выберете нужный вам тариф.',
+    { reply_markup: newSubscrptionMenu }
   )
-  await ctx.reply('Спасибо! Ваш чек отправлен на проверку администратору. Ожидайте подтверждения.')
-}))
-
-bot.action('approove', async ctx => {
-  const payment = approoveRequests[ctx.from.id]
-  if (!payment) return
-  delete approoveRequests[ctx.from.id]
-  await ctx.telegram.sendMessage(payment.user, `Оплата подтверждена! Ваша подписка активирована.
-Ваш аккаунт:
-Логин: user123@example.com
-Пароль: zjasd@&e72q878RHIS`)
-  await ctx.editMessageReplyMarkup({ inline_keyboard: [] })
 })
 
-bot.action('reject', async ctx => {
-  const payment = approoveRequests[ctx.from.id]
-  if (!payment) return
-  delete approoveRequests[ctx.from.id]
-  await ctx.telegram.sendMessage(payment.user, `К сожалению ваш платеж был отклонен. Свяжитесь с администрацией.`)
-  await ctx.editMessageReplyMarkup({ inline_keyboard: [] })
+bot.on('message:document', async ctx => {
+  const planId = ctx.session.planId
+  if (planId === undefined) return
+  const plan = await plans.withId(planId)
+  if (!plan) {
+    await ctx.reply('Ошибка! Выбранный вами тариф не найден. Для возврата средств обратитесь к администратору')
+    return
+  }
+  delete ctx.session.planId
+  const admin = await admins.any()
+  try {
+    await admin.requestCheck(plan, await users.withId(ctx.from.id), ctx.message.message_id)
+  } catch (e) {
+    await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. Для возврата средств обратитесь к администратору')
+    throw e
+  }
+  await ctx.reply('Ваш чек был отправлен администратору для проверки. Ожидайте подтверждения')
 })
 
-bot.launch(() => console.log('Bot started'))
+bot.catch(details => console.error(details.error))
+bot.start({ onStart: () => console.log('Bot started') })
