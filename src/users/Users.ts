@@ -1,6 +1,6 @@
 import { UserId } from "../aliases";
-import { User } from "../user/User";
+import User from "../user/User";
 
-export interface Users {
+export default interface Users {
   withId(id: UserId): Promise<User>;
 }

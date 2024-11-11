@@ -2,8 +2,8 @@ import { Menu, MenuRange } from "@grammyjs/menu"
 import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
 import { PlanId } from "./aliases"
 import { FakePlans } from "./plans/Plans"
-import { Admins } from "./admins/Admins"
-import { Users } from "./users/Users"
+import Admins from "./admins/Admins"
+import Users from "./users/Users"
 import { FakePlan } from "./plan/Plan"
 
 const plans = new FakePlans({

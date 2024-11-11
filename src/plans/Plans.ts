@@ -1,7 +1,7 @@
 import { PlanId } from "../aliases";
-import { Plan } from "../plan/Plan";
+import Plan from "../plan/Plan";
 
-export interface Plans {
+export default interface Plans {
   all(): Promise<Plan[]>;
   withId(id: PlanId): Promise<Plan | undefined>;
 }

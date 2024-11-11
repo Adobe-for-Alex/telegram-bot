@@ -1,5 +1,5 @@
-import { Admin } from "../admin/Admin";
+import Admin from "../admin/Admin";
 
-export interface Admins {
+export default interface Admins {
   any(): Promise<Admin>;
 }
