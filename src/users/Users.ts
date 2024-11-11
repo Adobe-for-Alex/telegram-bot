@@ -1,7 +1,6 @@
-import User from "../user/User";
-import {ChatId, TelegramId} from "../aliases";
+import { UserId } from "../aliases";
+import { User } from "../user/User";
 
-export default interface Users {
-  register(id: TelegramId, chat: ChatId): Promise<User>
-  withId(id: TelegramId): Promise<User | undefined>
+export interface Users {
+  withId(id: UserId): Promise<User>;
 }

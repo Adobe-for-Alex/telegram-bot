@@ -1,45 +1,10 @@
 import { Menu, MenuRange } from "@grammyjs/menu"
 import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
-
-type PlanId = number
-type UserId = number
-type MessageId = number
-type SubscrptionId = number
-
-interface Plan {
-  id(): Promise<PlanId>
-  extendSubscrptionFor(user: User): Promise<void>
-  asString(): Promise<string>
-}
-
-interface Plans {
-  all(): Promise<Plan[]>
-  withId(id: PlanId): Promise<Plan | undefined>
-}
-
-interface Subscrption {
-  id(): Promise<SubscrptionId>
-  ended(): Promise<Date>
-  asString(): Promise<string>
-}
-
-interface User {
-  id(): Promise<UserId>
-  name(): Promise<string>
-  subscrption(): Promise<Subscrption | undefined>
-}
-
-interface Users {
-  withId(id: UserId): Promise<User>
-}
-
-interface Admin {
-  requestCheck(plan: Plan, user: User, messageId: MessageId): Promise<void>
-}
-
-interface Admins {
-  any(): Promise<Admin>
-}
+import { PlanId } from "./aliases"
+import { Plans } from "./plans/Plans"
+import { Admins } from "./admins/Admins"
+import { Users } from "./users/Users"
+import { Plan } from "./plan/Plan"
 
 interface Session {
   planId?: PlanId
