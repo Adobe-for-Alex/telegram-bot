@@ -69,6 +69,14 @@ if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
 const bot = new Bot<ContextWithSession>(token)
 bot.use(session())
 
+const paymentMenu = new Menu<ContextWithSession>('payment-menu')
+  .text('Отменить', async ctx => {
+    delete ctx.session.planId
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
+    await ctx.editMessageText('Отменено')
+  })
+bot.use(paymentMenu.middleware())
+
 const newSubscrptionMenu = new Menu<ContextWithSession>('new-subscription')
   .dynamic(async () => {
     const range = new MenuRange<ContextWithSession>()
@@ -76,6 +84,12 @@ const newSubscrptionMenu = new Menu<ContextWithSession>('new-subscription')
       range.text(await plan.asString(), async ctx => {
         await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
         ctx.session.planId = await plan.id()
+        await ctx.reply(
+          `Вы выбрали тариф: ${await plan.asString()}
+Вам необходимо оплатить его и отправить нам чек
+Реквезиты для оплаты: <реквезиты>`,
+          { reply_markup: paymentMenu }
+        )
       }).row()
     }
     return range
