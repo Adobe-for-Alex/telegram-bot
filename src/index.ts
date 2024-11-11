@@ -1,33 +1,24 @@
 import { Menu, MenuRange } from "@grammyjs/menu"
 import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
 import { PlanId } from "./aliases"
-import { Plans } from "./plans/Plans"
+import { FakePlans } from "./plans/Plans"
 import { Admins } from "./admins/Admins"
 import { Users } from "./users/Users"
-import { Plan } from "./plan/Plan"
+import { FakePlan } from "./plan/Plan"
+
+const plans = new FakePlans({
+  1: new FakePlan(1, '1 месяц - $2'),
+  2: new FakePlan(2, '3 месяц - $5'),
+  3: new FakePlan(3, '6 месяц - $10'),
+})
+
+const admins = {} as Admins
+const users = {} as Users
 
 interface Session {
   planId?: PlanId
 }
 type ContextWithSession = Context & SessionFlavor<Session>
-
-const rawPlans = [
-  [1, '1 месяц - $2'],
-  [3, '3 месяц - $5'],
-  [6, '6 месяц - $10'],
-] as const
-const adoptPlan = (id: number, raw: readonly [number, string]): Plan => ({
-  id: async () => id,
-  extendSubscrptionFor: async () => { },
-  asString: async () => raw[1]
-})
-const plans: Plans = {
-  all: async () => rawPlans.map((x, i) => adoptPlan(i, x)),
-  withId: async (id: PlanId) => rawPlans[id] ? adoptPlan(id, rawPlans[id]) : undefined
-}
-
-const admins = {} as Admins
-const users = {} as Users
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
