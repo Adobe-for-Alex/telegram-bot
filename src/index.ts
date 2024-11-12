@@ -2,7 +2,7 @@ import { Menu, MenuRange } from "@grammyjs/menu"
 import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
 import { PlanId } from "./aliases"
 import { FakePlans } from "./plans/Plans"
-import Admins from "./admins/Admins"
+import { FakeAdmins } from "./admins/Admins"
 import { FakeUsers } from "./users/Users"
 import { FakePlan } from "./plan/Plan"
 
@@ -23,49 +23,8 @@ if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
 const bot = new Bot<ContextWithSession>(token)
 bot.use(session({ initial: () => ({}) }))
 
-const admins: Admins = {
-  any: async () => {
-    return {
-      requestCheck: async (plan, user, messageId) => {
-        const adminId = 588786574
-        await bot.api.forwardMessage(adminId, await user.id(), messageId)
-        await bot.api.sendMessage(
-          adminId,
-          `Запрос на проверку оплаты
-Пользователь: ${await user.name()}
-Тариф: ${await plan.asString()}`,
-          {
-            reply_markup: new InlineKeyboard()
-              .text('Подтвердить', `approve-${await user.id()}`)
-              .text('Отклонить', `reject-${await user.id()}`)
-          }
-        )
-      }
-    }
-  }
-}
-
-bot.on('callback_query:data', async (ctx, next) => {
-  const match = /^approve-(.*)$/.exec(ctx.callbackQuery.data)
-  if (match === null) return next()
-  const userId = Number(match[1])
-  const user = await users.withId(userId)
-  await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
-  await ctx.api.sendMessage(
-    userId,
-    `Ваш платеж одобрен!
-Данные вашей подписки:
-
-${await user.subscrption().then(x => x?.asString())}`)
-})
-
-bot.on('callback_query:data', async (ctx, next) => {
-  const match = /^reject-(.*)$/.exec(ctx.callbackQuery.data)
-  if (match === null) return next()
-  const userId = Number(match[1])
-  await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
-  await ctx.api.sendMessage(userId, 'Ваш платеж отклонен. Для возврата средств свяжитесь с администратором')
-})
+const admins = new FakeAdmins(bot.api, users, [588786574])
+bot.use(admins.middleware())
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
   .text('Отменить', async ctx => {
