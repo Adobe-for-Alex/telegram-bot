@@ -4,18 +4,11 @@ import { PlanId } from "./aliases"
 import { PrismaClient } from "@prisma/client"
 import PlansInPrisma from "./plans/PlansInPrisma"
 import UsersInPrisma from "./users/UsersInPrisma"
-import SubscriptionService from "./sessions/SubscriptionService"
 import AdminsInPrisma from "./admins/AdminsInPrisma"
 
 const prisma = new PrismaClient()
 const plans = new PlansInPrisma(prisma)
-const users = new UsersInPrisma(
-  prisma,
-  new SubscriptionService(
-    new URL('http://subscrption-service/'),
-    prisma
-  )
-)
+const users = new UsersInPrisma(prisma)
 
 interface Session {
   planId?: PlanId,
