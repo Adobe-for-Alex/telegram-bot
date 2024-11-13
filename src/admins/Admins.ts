@@ -23,7 +23,7 @@ export class FakeAdmins implements Admins {
         await this.api.sendMessage(
           adminId,
           `Запрос на проверку оплаты
-Пользователь: ${await user.name()}
+Пользователь: ${await user.id()}
 Тариф: ${await plan.asString()}`,
           {
             reply_markup: new InlineKeyboard()
