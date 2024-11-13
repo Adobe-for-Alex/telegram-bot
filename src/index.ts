@@ -1,17 +1,21 @@
 import { Menu, MenuRange } from "@grammyjs/menu"
 import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
 import { PlanId } from "./aliases"
-import { FakePlans } from "./plans/Plans"
-import { FakeAdmins } from "./admins/Admins"
-import { FakeUsers } from "./users/Users"
-import { FakePlan } from "./plan/Plan"
+import { PrismaClient } from "@prisma/client"
+import PlansInPrisma from "./plans/PlansInPrisma"
+import UsersInPrisma from "./users/UsersInPrisma"
+import SubscriptionService from "./sessions/SubscriptionService"
+import AdminsInPrisma from "./admins/AdminsInPrisma"
 
-const plans = new FakePlans({
-  1: new FakePlan(1, '1 месяц - $2'),
-  2: new FakePlan(2, '3 месяц - $5'),
-  3: new FakePlan(3, '6 месяц - $10'),
-})
-const users = new FakeUsers()
+const prisma = new PrismaClient()
+const plans = new PlansInPrisma(prisma)
+const users = new UsersInPrisma(
+  prisma,
+  new SubscriptionService(
+    new URL('http://subscrption-service/'),
+    prisma
+  )
+)
 
 interface Session {
   planId?: PlanId,
@@ -23,7 +27,7 @@ if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
 const bot = new Bot<ContextWithSession>(token)
 bot.use(session({ initial: () => ({}) }))
 
-const admins = new FakeAdmins(bot.api, users, [588786574])
+const admins = new AdminsInPrisma(bot.api, prisma)
 bot.use(admins.middleware())
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
