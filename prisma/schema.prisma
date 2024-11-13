@@ -16,13 +16,7 @@ datasource db {
 model User {
   /// Telegram ID.
   id            Int            @id
-  /// Howe to name the user in chat.
-  /// This could be the username, firstname and secondname or other name from Telegram.
-  name          String
-  /// Stage of chat with user.
-  stage         String
   createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
   admin         Admin?
   payments      Payment[]
   subscriptions Subscription[]
