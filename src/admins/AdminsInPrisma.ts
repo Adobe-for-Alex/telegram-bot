@@ -3,6 +3,7 @@ import Admin from "../admin/Admin";
 import Admins from "./Admins";
 import { PrismaClient } from "@prisma/client";
 import Users from "../users/Users";
+import Plans from "../plans/Plans";
 
 export default class AdminsInPrisma implements Admins {
   constructor(
@@ -45,7 +46,7 @@ export default class AdminsInPrisma implements Admins {
       }
     }
   }
-  middleware(users: Users): Middleware {
+  middleware(plans: Plans, users: Users): Middleware {
     return async (ctx, next) => {
       const match = /^(approve|reject)-(.*)$/.exec(ctx.callbackQuery?.data || '')
       if (match === null) return next()
@@ -55,23 +56,25 @@ export default class AdminsInPrisma implements Admins {
         include: { payment: { include: { user: true } } }
       })
       if (!request) throw new Error(`Request ${requestId} not found`)
-      const user = request.payment.user.id
+      const userId = request.payment.user.id
+      const user = await users.withId(userId)
       switch (match[1]) {
         case 'approve': {
           await this.prisma.approve.create({ data: { requestId } })
+          await plans.withId(request.payment.planId).then(x => x?.extendSubscrptionFor(user))
           await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
           await ctx.api.sendMessage(
-            user,
+            userId,
             `Ваш платеж одобрен!
 Данные вашей подписки:
 
-${await users.withId(user).then(x => x.subscrption()).then(x => x?.asString())}`)
+${await user.subscrption().then(x => x?.asString())}`)
           break;
         }
         case 'reject': {
           await this.prisma.reject.create({ data: { requestId, reason: 'Not implemented' } })
           await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
-          await ctx.api.sendMessage(user, 'Ваш платеж отклонен. Для возврата средств свяжитесь с администратором')
+          await ctx.api.sendMessage(userId, 'Ваш платеж отклонен. Для возврата средств свяжитесь с администратором')
           break;
         }
       }

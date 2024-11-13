@@ -21,7 +21,7 @@ const bot = new Bot<ContextWithSession>(token)
 bot.use(session({ initial: () => ({}) }))
 
 const admins = new AdminsInPrisma(bot.api, prisma)
-bot.use(admins.middleware(users))
+bot.use(admins.middleware(plans, users))
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
   .text('Отменить', async ctx => {
