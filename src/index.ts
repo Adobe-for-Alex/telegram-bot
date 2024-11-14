@@ -19,6 +19,10 @@ const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
 const bot = new Bot<ContextWithSession>(token)
 bot.use(session({ initial: () => ({}) }))
+bot.use((ctx, next) => {
+  console.log(`User ${ctx.from?.id} Chat ${ctx.chat?.id} Message ${ctx.message?.message_id} Callback ${ctx.update.callback_query?.data}`)
+  return next()
+})
 
 const admins = new AdminsInPrisma(bot.api, prisma)
 bot.use(admins.middleware(plans, users))
@@ -102,5 +106,5 @@ bot.on('message:document', async ctx => {
   await ctx.reply('Ваш чек был отправлен администратору для проверки. Ожидайте подтверждения')
 })
 
-bot.catch(details => console.error(details.error))
+bot.catch(details => console.error(`User ${details.ctx.from?.id} Chat ${details.ctx.chat?.id}`, details.error))
 bot.start({ onStart: () => console.log('Bot started') })
