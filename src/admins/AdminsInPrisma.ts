@@ -12,12 +12,12 @@ export default class AdminsInPrisma implements Admins {
   ) { }
   async any(): Promise<Admin> {
     return {
-      requestCheck: async (plan, user, messageId) => {
+      requestCheck: async (plan, user, messageId, filePath) => {
         const payment = await this.prisma.payment.create({
           data: {
             userId: await user.id(),
             planId: await plan.id(),
-            receiptUrl: 'stub'
+            receiptUrl: filePath
           }
         })
         const { userId: admin } = await this.prisma.admin.findFirst({

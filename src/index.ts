@@ -88,12 +88,15 @@ bot.on('message:document', async ctx => {
     await ctx.reply('Ошибка! Выбранный вами тариф не найден. Для возврата средств обратитесь к администратору')
     return
   }
-  delete ctx.session.planId
   const admin = await admins.any()
   try {
-    await admin.requestCheck(plan, await users.withId(ctx.from.id), ctx.message.message_id)
+    const filePath = await ctx.getFile().then(x => x.file_path)
+    if (filePath === undefined) throw new Error('Failed to get file_path of document')
+    await admin.requestCheck(plan, await users.withId(ctx.from.id), ctx.message.message_id, filePath)
+    delete ctx.session.planId
   } catch (e) {
-    await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. Для возврата средств обратитесь к администратору')
+    await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. '
+      + 'Попробуйте отправить чек еще раз или обратитесь к администратору для возврата средств')
     throw e
   }
   await ctx.reply('Ваш чек был отправлен администратору для проверки. Ожидайте подтверждения')
