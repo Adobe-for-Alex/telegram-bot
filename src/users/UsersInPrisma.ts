@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { UserId } from "../aliases";
 import User from "../user/User";
 import Users from "./Users";
+import UserInPrisma from "../user/UserInPrisma";
 
 export default class UsersInPrisma implements Users {
   constructor(
@@ -16,23 +17,6 @@ export default class UsersInPrisma implements Users {
         id: id
       }
     })
-    return {
-      id: async () => id,
-      subscrption: async () => {
-        const subscrption = await this.prisma.subscription.findFirst({
-          where: { userId: id },
-          orderBy: { expiredAt: 'desc' },
-          include: { user: { include: { sessions: { where: { deleted: false }, take: 1 } } } }
-        })
-        if (!subscrption) return undefined
-        return {
-          id: async () => subscrption.approveId,
-          ended: async () => subscrption.expiredAt,
-          asString: async () => `E-mail: ${subscrption.user.sessions[0]?.email}
-Пароль: ${subscrption.user.sessions[0]?.password}
-Истекает: ${subscrption.expiredAt}`
-        }
-      }
-    }
+    return new UserInPrisma(id, this.prisma)
   }
 }
