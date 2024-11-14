@@ -5,18 +5,26 @@ import { PrismaClient } from "@prisma/client"
 import PlansInPrisma from "./plans/PlansInPrisma"
 import UsersInPrisma from "./users/UsersInPrisma"
 import AdminsInPrisma from "./admins/AdminsInPrisma"
+import express from "express"
+import SubscriptionService from "./sessions/SubscriptionService"
+
+const token = process.env['TELEGRAM_BOT_TOKEN']
+if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
+const subscriptionServiceBaseUrl = process.env['SUBSCRIPTION_SERVICE_BASE_URL']
+if (!subscriptionServiceBaseUrl) throw new Error('SUBSCRIPTION_SERVICE_BASE_URL is undefined')
+const webhookPath = process.env['SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH']
+if (!webhookPath) throw new Error('SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH is undefined')
 
 const prisma = new PrismaClient()
 const plans = new PlansInPrisma(prisma)
 const users = new UsersInPrisma(prisma)
+const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), prisma)
 
 interface Session {
   planId?: PlanId,
 }
 type ContextWithSession = Context & SessionFlavor<Session>
 
-const token = process.env['TELEGRAM_BOT_TOKEN']
-if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
 const bot = new Bot<ContextWithSession>(token)
 bot.use(session({ initial: () => ({}) }))
 bot.use((ctx, next) => {
@@ -25,7 +33,7 @@ bot.use((ctx, next) => {
 })
 
 const admins = new AdminsInPrisma(bot.api, prisma)
-bot.use(admins.middleware(plans, users))
+bot.use(admins.middleware(plans, users, sessions))
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
   .text('Отменить', async ctx => {
@@ -108,3 +116,25 @@ bot.on('message:document', async ctx => {
 
 bot.catch(details => console.error(`User ${details.ctx.from?.id} Chat ${details.ctx.chat?.id}`, details.error))
 bot.start({ onStart: () => console.log('Bot started') })
+
+const webhook = express()
+webhook.use((req, _, next) => {
+  console.log(req.method, req.path, 'Query:', req.query, 'Body:', req.body)
+  return next()
+})
+webhook.post(webhookPath, async (req, _, next) => {
+  try {
+    const { id, email, password } = req.body
+    await sessions.update(id, email, password)
+    const user = await sessions.withId(id).then(x => x?.user())
+    if (!user) throw new Error(`Session ${id} not found while update it`)
+    await bot.api.sendMessage(
+      await user.id(),
+      `Данные вашей подписки были обновленны:
+
+${await user.subscrption()}`
+    )
+  } catch (e) {
+    return next(e)
+  }
+})

@@ -42,4 +42,10 @@ export default class SubscriptionService implements Sessions {
     })
     return new SessionInService(newSession.id, this.baseUrl, this.prisma)
   }
+  async update(id: SessionId, email: string, password: string): Promise<void> {
+    await this.prisma.session.update({
+      where: { id },
+      data: { email, password }
+    })
+  }
 }

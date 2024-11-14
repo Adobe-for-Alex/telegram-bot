@@ -4,6 +4,7 @@ import Admins from "./Admins";
 import { PrismaClient } from "@prisma/client";
 import Users from "../users/Users";
 import Plans from "../plans/Plans";
+import Sessions from "../sessions/Sessions";
 
 export default class AdminsInPrisma implements Admins {
   constructor(
@@ -46,7 +47,7 @@ export default class AdminsInPrisma implements Admins {
       }
     }
   }
-  middleware(plans: Plans, users: Users): Middleware {
+  middleware(plans: Plans, users: Users, sessions: Sessions): Middleware {
     return async (ctx, next) => {
       const match = /^(approve|reject)-(.*)$/.exec(ctx.callbackQuery?.data || '')
       if (match === null) return next()
@@ -62,6 +63,7 @@ export default class AdminsInPrisma implements Admins {
         case 'approve': {
           await this.prisma.approve.create({ data: { requestId } })
           await plans.withId(request.payment.planId).then(x => x?.extendSubscrptionFor(user))
+          await sessions.forUser(await user.id())
           await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
           await ctx.api.sendMessage(
             userId,
