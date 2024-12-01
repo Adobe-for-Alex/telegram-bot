@@ -30,7 +30,10 @@ export default class SubscriptionService implements Sessions {
     })
     if (!user) throw new Error(`User with id ${id} not exists while restoring session for him`)
 
-    const { id: sessionId, email, password } = await fetch(`${this.baseUrl}/sessions`, { method: 'POST' }).then(x => x.json())
+    console.log('Create session URL:', new URL('/sessions', this.baseUrl))
+    const response = await fetch(new URL('/sessions', this.baseUrl), { method: 'POST' })
+    console.log('Create session:', response.status, response.statusText, await response.clone().text())
+    const { id: sessionId, email, password } = await response.json()
 
     const newSession = await this.prisma.session.create({
       data: {
