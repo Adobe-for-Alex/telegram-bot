@@ -76,7 +76,7 @@ bot.command('start', async ctx => {
 
 bot.hears('Текущая подписка', async ctx => {
   if (ctx.from === undefined) return
-  const user = await users.withId(ctx.from.id)
+  const user = await users.withId(`${ctx.from.id}`)
   const subscrption = await user.subscrption()
   if (subscrption === undefined || await subscrption.ended() < new Date()) {
     await ctx.reply('У вас сейчас нету подписки')
@@ -104,7 +104,7 @@ bot.on('message:document', async ctx => {
   try {
     const filePath = await ctx.getFile().then(x => x.file_path)
     if (filePath === undefined) throw new Error('Failed to get file_path of document')
-    await admin.requestCheck(plan, await users.withId(ctx.from.id), ctx.message.message_id, filePath)
+    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), ctx.message.message_id, filePath)
     delete ctx.session.planId
   } catch (e) {
     await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. '

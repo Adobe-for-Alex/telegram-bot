@@ -40,7 +40,9 @@ export class FakeAdmins implements Admins {
       if (match === null) return next()
       switch (match[1]) {
         case 'approve': {
-          const userId = Number(match[2])
+          const userId = match[2]
+          if (userId === undefined)
+            throw Error(`User ID is undefined for approve!`)
           const user = await this.users.withId(userId)
           await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
           await ctx.api.sendMessage(
@@ -52,7 +54,9 @@ ${await user.subscrption().then(x => x?.asString())}`)
           break;
         }
         case 'reject': {
-          const userId = Number(match[2])
+          const userId = match[2]
+          if (userId === undefined)
+            throw Error(`User ID is undefined for reject!`)
           await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
           await ctx.api.sendMessage(userId, 'Ваш платеж отклонен. Для возврата средств свяжитесь с администратором')
           break;
