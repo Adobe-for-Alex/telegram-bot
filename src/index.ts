@@ -117,12 +117,12 @@ bot.on('message:document', async ctx => {
 bot.catch(details => console.error(`User ${details.ctx.from?.id} Chat ${details.ctx.chat?.id}`, details.error))
 bot.start({ onStart: () => console.log('Bot started') })
 
-const webhook = express()
+const webhook = express().use(express.json())
 webhook.use((req, _, next) => {
   console.log(req.method, req.path, 'Query:', req.query, 'Body:', req.body)
   return next()
 })
-webhook.post(webhookPath, async (req, _, next) => {
+webhook.post(webhookPath, async (req, res, next) => {
   try {
     const { id, email, password } = req.body
     await sessions.update(id, email, password)
@@ -132,9 +132,11 @@ webhook.post(webhookPath, async (req, _, next) => {
       await user.id(),
       `Данные вашей подписки были обновленны:
 
-${await user.subscrption()}`
+${await user.subscrption().then(x => x?.asString())}`
     )
+    res.status(200).send('Updated')
   } catch (e) {
     return next(e)
   }
 })
+webhook.listen(8080, () => console.log('Server started'))
