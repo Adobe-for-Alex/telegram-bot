@@ -1,4 +1,5 @@
-export type TelegramId = string
+export type PlanId = number
+export type UserId = string
+export type MessageId = number
 export type SessionId = string
-export type ChatId = string
-export type TelegramNickname = string
+export type SubscrptionId = number

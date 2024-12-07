@@ -1,10 +1,7 @@
-import Message from "../message/Message";
-import Session from "../session/Session";
-import {TelegramNickname} from "../aliases";
+import { UserId } from "../aliases";
+import Subscrption from "../subscription/Subscrption";
 
 export default interface User {
-  name(): Promise<TelegramNickname>
-  session(): Promise<Session>
-  send(message: Message): Promise<void>
-  answer(): Promise<Message>
+  id(): Promise<UserId>;
+  subscrption(): Promise<Subscrption | undefined>;
 }

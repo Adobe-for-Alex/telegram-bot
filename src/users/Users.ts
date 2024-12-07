@@ -1,7 +1,15 @@
+import { UserId } from "../aliases";
 import User from "../user/User";
-import {ChatId, TelegramId} from "../aliases";
 
 export default interface Users {
-  register(id: TelegramId, chat: ChatId): Promise<User>
-  withId(id: TelegramId): Promise<User | undefined>
+  withId(id: UserId): Promise<User>;
+}
+
+export class FakeUsers implements Users {
+  async withId(id: UserId): Promise<User> {
+    return {
+      id: async () => id,
+      subscrption: async () => undefined
+    }
+  }
 }

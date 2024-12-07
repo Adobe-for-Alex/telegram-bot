@@ -1,161 +1,142 @@
-import express from 'express'
-import { Markup, Telegraf } from 'telegraf'
-
-const app = express()
-app.get('/', async (req, res, next) => {
-  const name = req.query['name']
-  res.send(name ? `Hello Mr. ${name}` : 'Hello World!')
-  next()
-})
-app.listen(8080, () => console.log('Server started'))
+import { Menu, MenuRange } from "@grammyjs/menu"
+import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
+import { PlanId } from "./aliases"
+import { PrismaClient } from "@prisma/client"
+import PlansInPrisma from "./plans/PlansInPrisma"
+import UsersInPrisma from "./users/UsersInPrisma"
+import AdminsInPrisma from "./admins/AdminsInPrisma"
+import express from "express"
+import SubscriptionService from "./sessions/SubscriptionService"
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
-const bot = new Telegraf(token)
-bot.command(
-  'start',
-  Telegraf.reply(
-    'Привет! Добро пожаловать в наш сервис.',
-    {
-      reply_markup: {
-        keyboard: [
-          [Markup.button.callback('Оформить подписку', 'subscribe')],
-        ],
-        resize_keyboard: true
-      }
-    }
-  )
-)
-bot.hears(
-  'Оформить подписку',
-  Telegraf.reply(
-    'Отлично! Давайте оформим подписку. Какой период вас интересует?',
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [Markup.button.callback('1 месяц - $2', 'subscribe-months-1')],
-          [Markup.button.callback('3 месяц - $5', 'subscribe-months-3')],
-          [Markup.button.callback('6 месяц - $10', 'subscribe-months-6')]
-        ],
-      }
-    }
-  )
-)
-const chain = <C,>(...fns: ((ctx: C) => void)[]) => (ctx: C) => { fns.forEach(x => x(ctx)) }
-bot.action(
-  'subscribe-months-1',
-  chain(
-    ctx => ctx.deleteMessage(),
-    ctx => ctx.reply(
-      `Вы выбрали подписку на 1 месяц.
-Стоимость: $2
+const subscriptionServiceBaseUrl = process.env['SUBSCRIPTION_SERVICE_BASE_URL']
+if (!subscriptionServiceBaseUrl) throw new Error('SUBSCRIPTION_SERVICE_BASE_URL is undefined')
+const webhookPath = process.env['SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH']
+if (!webhookPath) throw new Error('SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH is undefined')
 
-Пожалуйста, вышлите мне чек оплаты в виде файла.
-Реквизиты для оплаты: <реквизиты>`
-    ),
-    ctx => { requests[ctx.chat?.id || -1] = 2 },
-  )
-)
-bot.action(
-  'subscribe-months-3',
-  chain(
-    ctx => ctx.deleteMessage(),
-    ctx => ctx.reply(
-      `Вы выбрали подписку на 3 месяца.
-Стоимость: $5
+const prisma = new PrismaClient()
+const plans = new PlansInPrisma(prisma)
+const users = new UsersInPrisma(prisma)
+const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), prisma)
 
-Пожалуйста, вышлите мне чек оплаты в виде файла.
-Реквизиты для оплаты: <реквизиты>`
-    ),
-    ctx => { requests[ctx.chat?.id || -1] = 5 },
-  )
-)
-bot.action(
-  'subscribe-months-6',
-  chain(
-    ctx => ctx.deleteMessage(),
-    ctx => ctx.reply(
-      `Вы выбрали подписку на 6 месяцев.
-Стоимость: $10
-
-Пожалуйста, вышлите мне чек оплаты в виде файла.
-Реквизиты для оплаты: <реквизиты>`
-    ),
-    ctx => { requests[ctx.chat?.id || -1] = 10 },
-  )
-)
-
-type UserId = number
-type MessageId = number
-const payments: Record<UserId, MessageId> = {}
-
-const adminsInEnv = process.env['ADMINS']
-if (!adminsInEnv) throw new Error('ADMINS is undefined or empty')
-const admins: UserId[] = adminsInEnv.split(',').map(Number)
-const anyAdmin = () => {
-  for (const admin of admins) {
-    if (admin in approoveRequests) continue
-    return admin
-  }
-  return undefined
+interface Session {
+  planId?: PlanId,
 }
+type ContextWithSession = Context & SessionFlavor<Session>
 
-type Price = number
-type Payment = {
-  user: UserId,
-  receipt: MessageId,
-  price: Price
-}
-const requests: Record<UserId, Price> = {}
-const approoveRequests: Record<UserId, Payment> = {}
-
-bot.on('document', async ctx => {
-  const price = requests[ctx.message.from.id]
-  if (!price) return
-  delete requests[ctx.message.from.id]
-  payments[ctx.message.from.id] = ctx.message.message_id
-  const admin = anyAdmin()
-  if (!admin) {
-    await ctx.reply('К сожалению сейчас нету доступных администраторов для проверки вашего чека. Попробуйте позже.')
-    return
-  }
-  approoveRequests[admin] = {
-    user: ctx.message.from.id,
-    receipt: ctx.message.message_id,
-    price: price
-  }
-  await ctx.forwardMessage(admin)
-  await ctx.telegram.sendMessage(
-    admin,
-    `Пользователь ${ctx.message.from.username || ctx.message.from.id} отправил чек оплаты на сумму $${price}`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('Принять', 'approove'), Markup.button.callback('Отклонить', 'reject')]
-    ])
-  )
-  await ctx.reply('Спасибо! Ваш чек отправлен на проверку администратору. Ожидайте подтверждения.')
+const bot = new Bot<ContextWithSession>(token)
+bot.use(session({ initial: () => ({}) }))
+bot.use((ctx, next) => {
+  console.log(`User ${ctx.from?.id} Chat ${ctx.chat?.id} Message ${ctx.message?.message_id} Callback ${ctx.update.callback_query?.data}`)
+  return next()
 })
 
-bot.action('approove', chain(
-  async ctx => {
-    const payment = approoveRequests[ctx.from.id]
-    if (!payment) return
-    delete approoveRequests[ctx.from.id]
-    await ctx.telegram.sendMessage(payment.user, `Оплата подтверждена! Ваша подписка активирована.
-Ваш аккаунт:
-Логин: user123@example.com
-Пароль: zjasd@&e72q878RHIS`)
-  },
-  ctx => ctx.editMessageReplyMarkup({ inline_keyboard: [] }),
-))
+const admins = new AdminsInPrisma(bot.api, prisma)
+bot.use(admins.middleware(plans, users, sessions))
 
-bot.action('reject', chain(
-  async ctx => {
-    const payment = approoveRequests[ctx.from.id]
-    if (!payment) return
-    delete approoveRequests[ctx.from.id]
-    await ctx.telegram.sendMessage(payment.user, `К сожалению ваш платеж был отклонен. Свяжитесь с администрацией.`)
-  },
-  ctx => ctx.editMessageReplyMarkup({ inline_keyboard: [] }),
-))
+const paymentMenu = new Menu<ContextWithSession>('payment-menu')
+  .text('Отменить', async ctx => {
+    if (ctx.session.planId === undefined) return
+    delete ctx.session.planId
+    await ctx.reply('Оплата отменена')
+  })
+bot.use(paymentMenu.middleware())
 
-bot.launch(() => console.log('Bot started'))
+const newSubscrptionMenu = new Menu<ContextWithSession>('new-subscription')
+  .dynamic(async () => {
+    const range = new MenuRange<ContextWithSession>()
+    for (const plan of await plans.all()) {
+      range.text(await plan.asString(), async ctx => {
+        await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
+        ctx.session.planId = await plan.id()
+        await ctx.reply(
+          `Вы выбрали тариф: ${await plan.asString()}
+Вам необходимо оплатить его и отправить нам чек
+Реквезиты для оплаты: <реквезиты>`,
+          { reply_markup: paymentMenu }
+        )
+      }).row()
+    }
+    return range
+  })
+bot.use(newSubscrptionMenu.middleware())
+
+bot.command('start', async ctx => {
+  await ctx.reply(
+    'Привет! Добро пожаловать в наш сервис.',
+    {
+      reply_markup: new Keyboard()
+        .text('Текущая подписка').row()
+        .text('Продлить подписку').row()
+        .resized()
+    }
+  )
+})
+
+bot.hears('Текущая подписка', async ctx => {
+  if (ctx.from === undefined) return
+  const user = await users.withId(`${ctx.from.id}`)
+  const subscrption = await user.subscrption()
+  if (subscrption === undefined || await subscrption.ended() < new Date()) {
+    await ctx.reply('У вас сейчас нету подписки')
+    return
+  }
+  await ctx.reply(await subscrption.asString())
+})
+
+bot.hears('Продлить подписку', async ctx => {
+  await ctx.reply(
+    'Отлично! Выберете нужный вам тариф.',
+    { reply_markup: newSubscrptionMenu }
+  )
+})
+
+bot.on('message:document', async ctx => {
+  const planId = ctx.session.planId
+  if (planId === undefined) return
+  const plan = await plans.withId(planId)
+  if (!plan) {
+    await ctx.reply('Ошибка! Выбранный вами тариф не найден. Для возврата средств обратитесь к администратору')
+    return
+  }
+  const admin = await admins.any()
+  try {
+    const filePath = await ctx.getFile().then(x => x.file_path)
+    if (filePath === undefined) throw new Error('Failed to get file_path of document')
+    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), ctx.message.message_id, filePath)
+    delete ctx.session.planId
+  } catch (e) {
+    await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. '
+      + 'Попробуйте отправить чек еще раз или обратитесь к администратору для возврата средств')
+    throw e
+  }
+  await ctx.reply('Ваш чек был отправлен администратору для проверки. Ожидайте подтверждения')
+})
+
+bot.catch(details => console.error(`User ${details.ctx.from?.id} Chat ${details.ctx.chat?.id}`, details.error))
+bot.start({ onStart: () => console.log('Bot started') })
+
+const webhook = express().use(express.json())
+webhook.use((req, _, next) => {
+  console.log(req.method, req.path, 'Query:', req.query, 'Body:', req.body)
+  return next()
+})
+webhook.post(webhookPath, async (req, res, next) => {
+  try {
+    const { id, email, password } = req.body
+    await sessions.update(id, email, password)
+    const user = await sessions.withId(id).then(x => x?.user())
+    if (!user) throw new Error(`Session ${id} not found while update it`)
+    await bot.api.sendMessage(
+      await user.id(),
+      `Данные вашей подписки были обновленны:
+
+${await user.subscrption().then(x => x?.asString())}`
+    )
+    res.status(200).send('Updated')
+  } catch (e) {
+    return next(e)
+  }
+})
+webhook.listen(8080, () => console.log('Server started'))
