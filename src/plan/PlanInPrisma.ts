@@ -40,6 +40,6 @@ export default class PlanInPrisma implements Plan {
   }
   async asString(): Promise<string> {
     const plan = await this.prisma.plan.findFirst({ where: { id: this._id } })
-    return `${plan?.durationInMonths} месяцев - $${plan?.price}`
+    return `${plan?.durationInMonths} месяцев - ${plan?.price} рублей`
   }
 }
