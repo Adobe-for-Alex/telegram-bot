@@ -223,7 +223,7 @@ bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
   )
 })
 
-bot.on('message:document', async ctx => {
+bot.on(['message:document', 'message:photo'], async ctx => {
   const planId = ctx.session.planId
   if (planId === undefined) return
   const plan = await plans.withId(planId)
