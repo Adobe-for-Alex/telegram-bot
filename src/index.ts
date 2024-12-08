@@ -1,5 +1,5 @@
 import { Menu, MenuRange } from "@grammyjs/menu"
-import { Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor } from "grammy"
+import {Bot, Context, Keyboard, session, SessionFlavor} from "grammy"
 import { PlanId } from "./aliases"
 import { PrismaClient } from "@prisma/client"
 import PlansInPrisma from "./plans/PlansInPrisma"
@@ -22,6 +22,8 @@ const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), pr
 
 interface Session {
   planId?: PlanId,
+  planType?: string,
+  product?: string
 }
 type ContextWithSession = Context & SessionFlavor<Session>
 
@@ -36,59 +38,188 @@ const admins = new AdminsInPrisma(bot.api, prisma)
 bot.use(admins.middleware(plans, users, sessions))
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
-  .text('Отменить', async ctx => {
-    if (ctx.session.planId === undefined) return
-    delete ctx.session.planId
-    await ctx.reply('Оплата отменена')
-  })
-bot.use(paymentMenu.middleware())
+    .text('Отменить', async ctx => {
+      if (ctx.session.planId === undefined) return
+      delete ctx.session.planId
+      await ctx.deleteMessage();
+      await ctx.reply('Оплата отменена')
+    }).row()
+    .back('Назад', async ctx => {
+      await ctx.editMessageText('Отлично! Выберете нужный вам тариф.')
+      ctx.menu.nav('new-subscription')
+    })
 
-const newSubscrptionMenu = new Menu<ContextWithSession>('new-subscription')
-  .dynamic(async () => {
-    const range = new MenuRange<ContextWithSession>()
-    for (const plan of await plans.all()) {
-      range.text(await plan.asString(), async ctx => {
-        await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
-        ctx.session.planId = await plan.id()
-        await ctx.reply(
-          `Вы выбрали тариф: ${await plan.asString()}
+const products = [
+  'Photoshop',
+  'Illustrator',
+  'Firefly для генерации изображений',
+  'After Effects',
+  'Premier Pro',
+  'Lightroom',
+  'Lightroom Classic',
+  'Acrobat',
+  'Character Animator',
+  'Incopy',
+  'InDesign',
+  'Animate',
+  'Fresco',
+  'Premier Rush',
+  'Audition'
+]
+
+const productMenu = new Menu<ContextWithSession>('product-menu')
+    .dynamic(async () => {
+      const range = new MenuRange<ContextWithSession>()
+      for (const product of products) {
+        range.text(product, async ctx => {
+          ctx.session.product = product;
+          if (!ctx.session.planId) return;
+          const plan = await plans.withId(ctx.session.planId);
+          if (!plan) return;
+          await ctx.deleteMessage();
+          await ctx.reply(
+              `Вы выбрали продукт: ${product}
+${await plan.asString()}
 Вам необходимо оплатить его и отправить нам чек
-Реквезиты для оплаты: <реквезиты>`,
-          { reply_markup: paymentMenu }
-        )
-      }).row()
-    }
-    return range
-  })
-bot.use(newSubscrptionMenu.middleware())
+Реквезиты для оплаты: <реквизиты>`,
+              { reply_markup: paymentMenu }
+          )
+        }).row()
+      }
+      return range;
+    })
+    .back('Назад')
+
+const monthMenu = new Menu<ContextWithSession>('month-menu')
+    .dynamic(async (ctx) => {
+      const range = new MenuRange<ContextWithSession>()
+      for (const plan of await plans.all()) {
+        if (ctx.session.planType === 'one' && await plan.isSingle()) {
+          range.text(await plan.asString(), async ctx => {
+            await ctx.deleteMessage();
+            ctx.session.planId = await plan.id();
+            await ctx.reply(
+                'Adobe Creative Cloud  одно приложение:\n' +
+                '- Любая программа из всех на ваш выбор\n' +
+                '- 1000 генеративных кредитов (в случае выбора приложений с Firefly)\n' +
+                '- 2 ТБ облака\n' +
+                '- Для 2-х устройств\n' +
+                '- Поддержка Windows, Mac, iOS, iPadOS, Android\n' +
+                '- Никаких ограничений\n' +
+                '- Постоянные обновления \n',
+                { reply_markup: productMenu }
+            );
+          }).row()
+        } else if (ctx.session.planType === 'all' && !(await plan.isSingle())) {
+          range.text(await plan.asString(), async ctx => {
+            await ctx.deleteMessage();
+            ctx.session.planId = await plan.id();
+            await ctx.reply(
+                `Вы выбрали тариф: ${await plan.asString()} рублей
+Вам необходимо оплатить его и отправить нам чек
+Реквезиты для оплаты: <реквизиты>`,
+                { reply_markup: paymentMenu }
+            )
+          }).row()
+        }
+      }
+      return range;
+    })
+    .back('Назад')
+monthMenu.register(paymentMenu);
+monthMenu.register(productMenu);
+
+const typeMenu = new Menu<ContextWithSession>('type-menu')
+    .text('Adobe CC все приложения + ИИ', async ctx => {
+      await ctx.deleteMessage();
+      ctx.session.planType = 'all';
+      await ctx.reply(
+          'Выберите период',
+          { reply_markup: monthMenu }
+      )
+    }).row()
+    .text('Adobe CC одно приложение', async ctx => {
+      await ctx.deleteMessage();
+      ctx.session.planType = 'one';
+      await ctx.reply(
+          'Adobe Creative Cloud  одно приложение:\n' +
+          '- Любая программа из всех на ваш выбор\n' +
+          '- 1000 генеративных кредитов (в случае выбора приложений с Firefly)\n' +
+          '- 2 ТБ облака\n' +
+          '- Для 2-х устройств\n' +
+          '- Поддержка Windows, Mac, iOS, iPadOS, Android\n' +
+          '- Никаких ограничений\n' +
+          '- Постоянные обновления \n',
+          { reply_markup: monthMenu }
+      )
+    }).row()
+typeMenu.register(monthMenu);
+bot.use(typeMenu.middleware());
 
 bot.command('start', async ctx => {
   await ctx.reply(
-    'Привет! Добро пожаловать в наш сервис.',
-    {
-      reply_markup: new Keyboard()
-        .text('Текущая подписка').row()
-        .text('Продлить подписку').row()
-        .resized()
-    }
+      'Привет! Добро пожаловать в наш сервис.',
+      {
+        reply_markup: new Keyboard()
+            .text('Текущая подписка📝').row()
+            .text('Оплатить/Продлить подписку💸').row()
+            .text('Сотрудничество. Дропшиппинг⚙️').row()
+            .text('Онлайн поддержка👨🏽‍💻').row()
+            .resized()
+      }
   )
 })
 
-bot.hears('Текущая подписка', async ctx => {
+bot.hears('Текущая подписка📝', async ctx => {
   if (ctx.from === undefined) return
   const user = await users.withId(`${ctx.from.id}`)
-  const subscrption = await user.subscrption()
-  if (subscrption === undefined || await subscrption.ended() < new Date()) {
+  const subscription = await user.subscrption()
+  if (subscription === undefined || await subscription.ended() < new Date()) {
     await ctx.reply('У вас сейчас нету подписки')
     return
   }
-  await ctx.reply(await subscrption.asString())
+  await ctx.reply(await subscription.asString())
 })
 
-bot.hears('Продлить подписку', async ctx => {
+bot.hears('Оплатить/Продлить подписку💸', async ctx => {
   await ctx.reply(
-    'Отлично! Выберете нужный вам тариф.',
-    { reply_markup: newSubscrptionMenu }
+      'Отлично! Выберете нужный вам тариф.',
+      { reply_markup: typeMenu }
+  )
+})
+
+bot.hears('Сотрудничество. Дропшиппинг⚙️', async ctx => {
+  await ctx.reply(
+      'Добрый день! 👋 Команда SoftPlus рада приветствовать вас!\n' +
+      '\n' +
+      'Мы всегда открыты к сотрудничеству и ищем новых партнёров, готовых зарабатывать вместе с нами. Наша система дропшиппинга — это модель, при которой вы реализуете наш товар через свои платформы: Авито, социальные сети, собственный сайт, маркетплейсы или любые другие удобные для вас каналы.\n' +
+      'Вы полностью контролируете свои продажи, самостоятельно устанавливаете цены и зарабатываете на своей разнице.\n' +
+      '\n' +
+      'Для вас будет создан индивидуальный бот, который автоматизирует весь процесс:\n' +
+      ' • создаёт аккаунты для ваших клиентов,\n' +
+      ' • отправляет их напрямую,\n' +
+      ' • выдаёт новые в случае форс-мажоров,\n' +
+      ' • продлевает подписки и уведомляет клиентов.\n' +
+      '\n' +
+      'Всё, что от вас требуется, — направлять клиентов в вашего персонального бота, а остальное мы берём на себя.\n' +
+      '\n' +
+      'Что мы предлагаем:\n' +
+      ' • 📦 Автоматизированная система дропшиппинга: Система сама автоматически будет выдавать аккаунты клиентам, принимать платежи, продлевать, присылать данные и инструкцию, осуществлять замены проблемных аккаунтов, если такие будут!\n' +
+      ' • 💰 Индивидуальные цены: Для наших партнеров действуют специальные условия на покупку аккаунтов.\n' +
+      ' • 🚀 Полная поддержка: Мы готовы помочь вам в любое время и обеспечить надежное сотрудничество.\n' +
+      '\n' +
+      'Мы будем рады видеть вас в числе наших партнеров!\n' +
+      'Для вопросов по сотрудничеству обращайтесь:\n' +
+      '📩 @softplus_ww (с 08:00 до 23:00 по МСК ежедневно).\n' +
+      '\n' +
+      'С уважением,\n' +
+      'Команда SoftPlus'
+  )
+})
+
+bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
+  await ctx.reply(
+      'Аккаунт поддержки: @softplus_ww'
   )
 })
 

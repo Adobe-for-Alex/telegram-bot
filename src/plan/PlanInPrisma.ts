@@ -11,6 +11,11 @@ export default class PlanInPrisma implements Plan {
   async id(): Promise<PlanId> {
     return this._id
   }
+  async isSingle(): Promise<boolean> {
+    const plan = await this.prisma.plan.findFirst({ where: { id: this._id } })
+    if (!plan) return false;
+    return plan.isSingle;
+  }
   async extendSubscrptionFor(user: User): Promise<void> {
     const plan = await this.prisma.plan.findFirst({ where: { id: this._id } })
     if (!plan) throw new Error(`Plan ${this._id} not found`)
