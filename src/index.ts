@@ -42,7 +42,7 @@ bot.use((ctx, next) => {
 const notification = new NotificationService(prisma, bot as unknown as Bot);
 
 const admins = new AdminsInPrisma(bot.api, prisma)
-bot.use(admins.middleware(plans, users, sessions))
+bot.use(admins.middleware(plans, users, sessions, discount))
 bot.use(discount.middleware());
 
 cron.schedule('*/1 * * * *', async () => {
@@ -264,7 +264,13 @@ bot.on(['message:document', 'message:photo'], async ctx => {
   try {
     const filePath = await ctx.getFile().then(x => x.file_path)
     if (filePath === undefined) throw new Error('Failed to get file_path of document')
-    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), ctx.message.message_id, filePath)
+    const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
+    const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
+    const plan = await plans.withId(ctx.session.planId ?? -1);
+    if (!plan) return;
+    const price = await plan.getPrice();
+    const priceWithRefDiscount = price - (refDiscount + personalDiscount) * price / 100;
+    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), [refDiscount + personalDiscount, priceWithRefDiscount], ctx.message.message_id, filePath)
     delete ctx.session.planId
   } catch (e) {
     await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. '
