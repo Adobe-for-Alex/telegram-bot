@@ -25,6 +25,9 @@ model User {
   personalDiscount         Int            @default(0)
   personalDiscountExpireAt DateTime       @default(now())
   lastAction               DateTime       @default(now())
+  referrerId               String?
+  referrer                 User?          @relation("UserReferrer", fields: [referrerId], references: [id])
+  referrals                User[]         @relation("UserReferrer")
 }
 
 model Admin {
