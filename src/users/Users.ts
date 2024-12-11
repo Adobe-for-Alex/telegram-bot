@@ -9,6 +9,7 @@ export class FakeUsers implements Users {
   async withId(id: UserId): Promise<User> {
     return {
       id: async () => id,
+      isAdmin: async () => false,
       subscrption: async () => undefined
     }
   }
