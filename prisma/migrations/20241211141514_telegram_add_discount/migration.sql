@@ -1,0 +1,16 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "lastAction" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "personalDiscount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "personalDiscountExpireAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+-- CreateTable
+CREATE TABLE "Discount" (
+    "id" INTEGER NOT NULL,
+    "price" INTEGER NOT NULL,
+    "expireAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Discount_pkey" PRIMARY KEY ("id")
+);
+
+-- AddForeignKey
+ALTER TABLE "Discount" ADD CONSTRAINT "Discount_id_fkey" FOREIGN KEY ("id") REFERENCES "Plan"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

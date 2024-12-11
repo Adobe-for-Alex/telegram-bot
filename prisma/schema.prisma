@@ -16,26 +16,34 @@ datasource db {
 
 model User {
   /// Telegram ID.
-  id            String            @id
-  createdAt     DateTime       @default(now())
-  admin         Admin?
-  payments      Payment[]
-  subscriptions Subscription[]
-  sessions      Session[]
+  id                       String         @id
+  createdAt                DateTime       @default(now())
+  admin                    Admin?
+  payments                 Payment[]
+  subscriptions            Subscription[]
+  sessions                 Session[]
+  personalDiscount         Int            @default(0)
+  personalDiscountExpireAt DateTime       @default(now())
+  lastAction               DateTime       @default(now())
+  referrerId               String?
+  referrer                 User?          @relation("UserReferrer", fields: [referrerId], references: [id])
+  referrals                User[]         @relation("UserReferrer")
 }
 
 model Admin {
-  userId   String                   @id @unique
+  userId   String                @id @unique
   user     User                  @relation(fields: [userId], references: [id])
   requests CheckPaymentRequest[]
 }
 
 model Plan {
-  id               Int       @id @default(autoincrement())
+  id               Int        @id @default(autoincrement())
   durationInMonths Int
   price            Float
   secret           Boolean
+  isSingle         Boolean    @default(false)
   payments         Payment[]
+  Discount         Discount[]
 }
 
 model Payment {
@@ -75,12 +83,14 @@ model Reject {
 }
 
 model Subscription {
-  approveId Int      @id @unique
-  userId    String
-  expiredAt DateTime
-  createdAt DateTime @default(now())
-  approve   Approve  @relation(fields: [approveId], references: [requestId])
-  user      User     @relation(fields: [userId], references: [id])
+  approveId      Int      @id @unique
+  userId         String
+  expiredAt      DateTime
+  createdAt      DateTime @default(now())
+  approve        Approve  @relation(fields: [approveId], references: [requestId])
+  user           User     @relation(fields: [userId], references: [id])
+  expireSent     Boolean  @default(false)
+  expireSoonSent Boolean  @default(false)
 }
 
 model Session {
@@ -93,4 +103,11 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model Discount {
+  id       Int      @id
+  price    Int
+  expireAt DateTime
+  plan     Plan     @relation(fields: [id], references: [id])
 }

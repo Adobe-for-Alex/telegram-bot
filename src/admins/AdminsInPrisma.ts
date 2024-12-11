@@ -5,6 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import Users from "../users/Users";
 import Plans from "../plans/Plans";
 import Sessions from "../sessions/Sessions";
+import DiscountService from "../discount/discount";
 
 export default class AdminsInPrisma implements Admins {
   constructor(
@@ -13,7 +14,7 @@ export default class AdminsInPrisma implements Admins {
   ) { }
   async any(): Promise<Admin> {
     return {
-      requestCheck: async (plan, user, messageId, filePath) => {
+      requestCheck: async (plan, user, discount: [number, number], messageId, filePath) => {
         const payment = await this.prisma.payment.create({
           data: {
             userId: await user.id(),
@@ -37,7 +38,9 @@ export default class AdminsInPrisma implements Admins {
           admin,
           `Запрос на проверку оплаты
 Пользователь: ${await user.id()}
-Тариф: ${await plan.asString()}`,
+Тариф: ${await plan.asString()}
+Скидка: ${discount[0]}%
+С учётом скидки ${discount[1]}`,
           {
             reply_markup: new InlineKeyboard()
               .text('Подтвердить', `approve-${request.paymentId}`)
@@ -47,7 +50,7 @@ export default class AdminsInPrisma implements Admins {
       }
     }
   }
-  middleware(plans: Plans, users: Users, sessions: Sessions): Middleware {
+  middleware(plans: Plans, users: Users, sessions: Sessions, discounts: DiscountService): Middleware {
     return async (ctx, next) => {
       const match = /^(approve|reject)-(.*)$/.exec(ctx.callbackQuery?.data || '')
       if (match === null) return next()
@@ -71,6 +74,7 @@ export default class AdminsInPrisma implements Admins {
 Данные вашей подписки:
 
 ${await user.subscrption().then(x => x?.asString())}`)
+          await discounts.removePersonalDiscount(request.payment.user.id);
           break;
         }
         case 'reject': {
