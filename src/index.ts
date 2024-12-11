@@ -8,6 +8,7 @@ import AdminsInPrisma from "./admins/AdminsInPrisma"
 import express from "express"
 import SubscriptionService from "./sessions/SubscriptionService"
 import NotificationService from "./notification/notification";
+import DiscountService from "./discount/discount";
 import cron from 'node-cron'
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
@@ -20,6 +21,7 @@ if (!webhookPath) throw new Error('SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH is u
 const prisma = new PrismaClient()
 const plans = new PlansInPrisma(prisma)
 const users = new UsersInPrisma(prisma)
+const discount = new DiscountService(prisma);
 const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), prisma)
 
 interface Session {
@@ -39,10 +41,12 @@ const notification = new NotificationService(prisma, bot as unknown as Bot);
 
 const admins = new AdminsInPrisma(bot.api, prisma)
 bot.use(admins.middleware(plans, users, sessions))
+bot.use(discount.middleware());
 
 cron.schedule('*/1 * * * *', async () => {
   await notification.notifyExpireSoon();
   await notification.notifyExpired();
+  await discount.checkForPersonalDiscounts(notification);
 });
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')

@@ -16,12 +16,15 @@ datasource db {
 
 model User {
   /// Telegram ID.
-  id            String         @id
-  createdAt     DateTime       @default(now())
-  admin         Admin?
-  payments      Payment[]
-  subscriptions Subscription[]
-  sessions      Session[]
+  id                       String         @id
+  createdAt                DateTime       @default(now())
+  admin                    Admin?
+  payments                 Payment[]
+  subscriptions            Subscription[]
+  sessions                 Session[]
+  personalDiscount         Int            @default(0)
+  personalDiscountExpireAt DateTime       @default(now())
+  lastAction               DateTime       @default(now())
 }
 
 model Admin {
@@ -31,12 +34,13 @@ model Admin {
 }
 
 model Plan {
-  id               Int       @id @default(autoincrement())
+  id               Int        @id @default(autoincrement())
   durationInMonths Int
   price            Float
   secret           Boolean
-  isSingle         Boolean   @default(false)
+  isSingle         Boolean    @default(false)
   payments         Payment[]
+  Discount         Discount[]
 }
 
 model Payment {
@@ -96,4 +100,11 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model Discount {
+  id       Int      @id
+  price    Int
+  expireAt DateTime
+  plan     Plan     @relation(fields: [id], references: [id])
 }
