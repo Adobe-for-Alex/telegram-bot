@@ -26,6 +26,27 @@ export default class DiscountService {
     })
   }
 
+  async checkForTemporaryDiscounts(notification: NotificationService) {
+    const currentDate = new Date();
+    const discounts = await this.prisma.discount.findMany({
+      where: {
+        expireAt: {
+          lt: currentDate
+        }
+      },
+      include: {
+        plan: true
+      }
+    });
+    for (const discount of discounts) {
+      const plan = discount.plan;
+      const planType = plan.isSingle ? 'Adobe CC все приложения + ИИ' : 'Adobe CC одно приложение';
+      const planDescription = `${plan?.durationInMonths} месяцев - ${discount.price} рублей (до скидки ${plan?.price})`;
+      await this.deleteDiscount(discount.id);
+      await notification.globalMessage(`Скидка\n${planType}\n${planDescription},\nбыла завершена`);
+    }
+  }
+
   async checkForPersonalDiscounts(notification: NotificationService) {
     const eightHoursAgo = new Date(new Date().getTime() - 8 * 60 * 60 * 1000);
     const currentDate = new Date();

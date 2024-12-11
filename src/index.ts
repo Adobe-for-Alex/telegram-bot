@@ -54,6 +54,7 @@ cron.schedule('*/1 * * * *', async () => {
   await notification.notifyExpireSoon();
   await notification.notifyExpired();
   await discount.checkForPersonalDiscounts(notification);
+  await discount.checkForTemporaryDiscounts(notification);
 });
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
@@ -115,6 +116,21 @@ ${await plan.asString()}\n` +
     })
     .back('Назад')
 
+const deleteDiscountMenu = new Menu<ContextWithSession>('delete-discount-menu')
+  .text('Подтвердить', async ctx => {
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() });
+    await ctx.reply('Скидка была удалена');
+    const plan = await plans.withId(ctx.session.planId ?? -1);
+    const planType = await plan?.isSingle() ? 'Adobe CC все приложения + ИИ' : 'Adobe CC одно приложение';
+    await notification.globalMessage(`Скидка\n${planType}\n${await plan?.asString()},\nбыла завершена`)
+    await discount.deleteDiscount(ctx.session.planId ?? -1);
+  }).row()
+  .text('Отменить', async ctx => {
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() });
+    await ctx.reply('Операция была отменена');
+  })
+bot.use(deleteDiscountMenu.middleware());
+
 const monthMenu = new Menu<ContextWithSession>('month-menu')
   .dynamic(async (ctx) => {
     const range = new MenuRange<ContextWithSession>();
@@ -122,6 +138,7 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
     for (const plan of await plans.all()) {
       const planString = await plan.asString();
       const planId = await plan.id();
+      const hasDiscount = await plan.hasDiscount();
       const isSingle = await plan.isSingle();
       const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
       const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
@@ -130,6 +147,24 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
       const userPrice = price - (userDiscount) * price / 100;
 
       switch (ctx.session.planType) {
+        case 'adminDelete':
+          if (!hasDiscount) continue;
+          range.text(planString, async ctx => {
+            await ctx.reply(`Выбран план ${planString}, id: ${planId}`);
+            await ctx.reply('Вы действительно хотите убрать скидку?', { reply_markup: deleteDiscountMenu });
+            ctx.session.planId = planId;
+            ctx.session.waitForPrice = true;
+          }).row();
+          break;
+        case 'admin':
+          if (hasDiscount) continue;
+          range.text(planString, async ctx => {
+            await ctx.reply(`Выбран план ${planString}, id: ${planId}`);
+            await ctx.reply('Введите новую цену');
+            ctx.session.planId = planId;
+            ctx.session.waitForPrice = true;
+          }).row();
+          break;
         case 'one':
           if (isSingle) {
             range.text(planString, async ctx => {
@@ -225,6 +260,81 @@ bot.command('start', async ctx => {
   )
 })
 
+bot.command('admin', async ctx => {
+    const user = await users.withId(ctx.chatId.toString());
+    if (!await user.isAdmin()) {
+        return;
+    }
+    await ctx.reply(
+        'Админ меню.',
+        {
+            reply_markup: new Keyboard()
+                .text('Глобальное сообщение').row()
+                .text('Временная скидка').row()
+                .text('Текущие скидки').row()
+                .resized()
+        }
+    )
+})
+
+const declineMenu = new Menu<ContextWithSession>('decline')
+  .text('Отменить', async ctx => {
+    ctx.session.waitForText = false;
+    await ctx.deleteMessage();
+  })
+bot.use(declineMenu.middleware());
+
+bot.hears('Глобальное сообщение', async ctx => {
+  ctx.session.waitForText = false;
+  ctx.session.waitForPrice = false;
+  ctx.session.waitForDuration = false;
+    const user = await users.withId(ctx.chatId.toString());
+    if (!await user.isAdmin()) {
+        return;
+    }
+    ctx.session.waitForText = true;
+    await ctx.reply(
+        'Введите сообщение.',
+        {
+            reply_markup: declineMenu
+        }
+    );
+})
+
+bot.hears('Временная скидка', async ctx => {
+  ctx.session.waitForText = false;
+  ctx.session.waitForPrice = false;
+  ctx.session.waitForDuration = false;
+    const user = await users.withId(ctx.chatId.toString());
+    if (!await user.isAdmin()) {
+        return;
+    }
+    ctx.session.planType = 'admin';
+    await ctx.reply(
+        'Выберите тариф.',
+        {
+            reply_markup: monthMenu
+        }
+    );
+})
+
+bot.hears('Текущие скидки', async ctx => {
+  ctx.session.waitForText = false;
+  ctx.session.waitForPrice = false;
+  ctx.session.waitForDuration = false;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  ctx.session.planType = 'adminDelete';
+  await ctx.reply(
+    'Выберите тариф.',
+    {
+      reply_markup: monthMenu
+    }
+  );
+})
+
 bot.hears('Текущая подписка📝', async ctx => {
   if (ctx.from === undefined) return
   const user = await users.withId(`${ctx.from.id}`)
@@ -315,6 +425,54 @@ bot.on(['message:document', 'message:photo'], async ctx => {
   }
   await ctx.reply('Ваш чек был отправлен администратору для проверки. Ожидайте подтверждения')
 })
+
+const confirmNewPrice = new Menu<ContextWithSession>('new-price')
+  .text('Подтвердить', async ctx => {
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() });
+    const plan = await plans.withId(ctx.session.planId ?? -1);
+    const planType = await plan?.isSingle() ? 'Adobe CC все приложения + ИИ' : 'Adobe CC одно приложение';
+    await notification.globalMessage(`Объявлена скидка на тариф\n ${planType}\n ${await plan?.asString()},\n успейте в течении ${ctx.session.duration} дней`)
+    await discount.createDiscount(ctx.session.planId ?? -1, ctx.session.price ?? -1, ctx.session.duration ?? -1)
+    await ctx.reply('Цена изменена');
+  }).row()
+  .text('Отклонить', async ctx => {
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() });
+    await ctx.reply('Цена не была изменена');
+  })
+bot.use(confirmNewPrice);
+
+bot.hears(/^.+$/, async ctx => {
+    const user = await users.withId(ctx.chatId.toString());
+    if (!await user.isAdmin()) return;
+    if (!ctx.message) return;
+    if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration) return;
+    if (ctx.session.waitForText) {
+      await notification.globalMessage(`${ctx.message.text}`);
+      ctx.session.waitForText = false;
+    }
+    else if (ctx.session.waitForPrice) {
+      const price = ctx.message.text ?? '1';
+      ctx.session.price = parseInt(price);
+      if (isNaN(ctx.session.price)) return;
+      await ctx.reply('Введите длительность (дней)');
+      ctx.session.waitForDuration = true;
+      ctx.session.waitForPrice = false;
+    }
+    else if (ctx.session.waitForDuration) {
+      const duration = ctx.message.text ?? '1';
+      ctx.session.duration = parseInt(duration);
+      if (isNaN(ctx.session.duration)) return;
+      await ctx.reply(
+        'Вы действительно хотите изменить тариф\n' +
+        `${(await (await plans.withId(ctx.session.planId ?? 1))?.asString())}\n` +
+        `Новая цена: ${ctx.session.price} рублей\n` +
+        `Новая длительность: ${ctx.session.duration} дней`,
+        {
+          reply_markup: confirmNewPrice,
+        });
+      ctx.session.waitForDuration = false;
+    }
+});
 
 bot.catch(details => console.error(`User ${details.ctx.from?.id} Chat ${details.ctx.chat?.id}`, details.error))
 bot.start({ onStart: () => console.log('Bot started') })
