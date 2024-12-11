@@ -28,8 +28,13 @@ const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), pr
 
 interface Session {
   planId?: PlanId,
-  planType?: string,
-  product?: string
+  planType?: 'all' | 'one' | 'admin' | 'adminDelete',
+  product?: string,
+  waitForText?: boolean
+  waitForPrice?: boolean
+  waitForDuration?: boolean
+  price?: number
+  duration?: number
 }
 type ContextWithSession = Context & SessionFlavor<Session>
 
