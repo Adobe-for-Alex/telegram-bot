@@ -11,6 +11,14 @@ export default class UserInPrisma implements User {
   async id(): Promise<UserId> {
     return this._id
   }
+  async isAdmin(): Promise<boolean> {
+    const user = this.prisma.user.findUnique({
+      where: { id: this._id, },
+      select: { admin: true }
+    });
+
+    return await user?.admin() !== null;
+  }
   async subscrption(): Promise<Subscrption | undefined> {
     const subscrption = await this.prisma.subscription.findFirst({
       where: { userId: this._id },
