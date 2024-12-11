@@ -9,6 +9,7 @@ import express from "express"
 import SubscriptionService from "./sessions/SubscriptionService"
 import NotificationService from "./notification/notification";
 import DiscountService from "./discount/discount";
+import ReferralService from "./referral/referral";
 import cron from 'node-cron'
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
@@ -22,6 +23,7 @@ const prisma = new PrismaClient()
 const plans = new PlansInPrisma(prisma)
 const users = new UsersInPrisma(prisma)
 const discount = new DiscountService(prisma);
+const referral = new ReferralService(prisma);
 const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), prisma)
 
 interface Session {
@@ -169,15 +171,20 @@ typeMenu.register(monthMenu);
 bot.use(typeMenu.middleware());
 
 bot.command('start', async ctx => {
+  const referralCode = ctx.message?.text.split(' ')[1];
+  if (referralCode) {
+    await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1');
+  }
   await ctx.reply(
       'Привет! Добро пожаловать в наш сервис.',
       {
         reply_markup: new Keyboard()
-            .text('Текущая подписка📝').row()
-            .text('Оплатить/Продлить подписку💸').row()
-            .text('Сотрудничество. Дропшиппинг⚙️').row()
-            .text('Онлайн поддержка👨🏽‍💻').row()
-            .resized()
+          .text('Текущая подписка📝').row()
+          .text('Оплатить/Продлить подписку💸').row()
+          .text('Сотрудничество. Дропшиппинг⚙️').row()
+          .text('Онлайн поддержка👨🏽‍💻').row()
+          .text('Реферальная система').row()
+          .resized()
       }
   )
 })
@@ -233,6 +240,16 @@ bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
   await ctx.reply(
       'Аккаунт поддержки: @softplus_ww'
   )
+})
+
+bot.hears('Реферальная система', async ctx => {
+  const user = await users.withId(`${ctx.from?.id}`);
+  const referralLink = referral.getReferralCode(await user.id());
+  await ctx.reply(
+    `Ваша реферальная ссылка: ${referralLink}\n` +
+    `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефераллов, ` +
+    `Ваша скидка составляет ${await referral.getDiscountPercent(`${ctx.from?.id}`)}%`
+  );
 })
 
 bot.on(['message:document', 'message:photo'], async ctx => {
