@@ -1,5 +1,5 @@
 import { Menu, MenuRange } from "@grammyjs/menu"
-import {Bot, Context, Keyboard, session, SessionFlavor} from "grammy"
+import {Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor} from "grammy"
 import { PlanId } from "./aliases"
 import { PrismaClient } from "@prisma/client"
 import PlansInPrisma from "./plans/PlansInPrisma"
@@ -58,14 +58,14 @@ cron.schedule('*/1 * * * *', async () => {
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
     .text('Отменить', async ctx => {
-      if (ctx.session.planId === undefined) return
-      delete ctx.session.planId
+      if (ctx.session.planId === undefined) return;
+      await ctx.editMessageReplyMarkup( { reply_markup: new InlineKeyboard() });
+      delete ctx.session.planId;
       await ctx.deleteMessage();
       await ctx.reply('Оплата отменена')
     }).row()
     .back('Назад', async ctx => {
       await ctx.editMessageText('Отлично! Выберете нужный вам тариф.')
-      ctx.menu.nav('new-subscription')
     })
 
 const products = [
