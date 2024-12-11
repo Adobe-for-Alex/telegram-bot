@@ -76,12 +76,14 @@ model Reject {
 }
 
 model Subscription {
-  approveId Int      @id @unique
-  userId    String
-  expiredAt DateTime
-  createdAt DateTime @default(now())
-  approve   Approve  @relation(fields: [approveId], references: [requestId])
-  user      User     @relation(fields: [userId], references: [id])
+  approveId      Int      @id @unique
+  userId         String
+  expiredAt      DateTime
+  createdAt      DateTime @default(now())
+  approve        Approve  @relation(fields: [approveId], references: [requestId])
+  user           User     @relation(fields: [userId], references: [id])
+  expireSent     Boolean  @default(false)
+  expireSoonSent Boolean  @default(false)
 }
 
 model Session {
