@@ -95,11 +95,17 @@ const productMenu = new Menu<ContextWithSession>('product-menu')
           if (!ctx.session.planId) return;
           const plan = await plans.withId(ctx.session.planId);
           if (!plan) return;
+          const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
+          const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
+          const userDiscount = refDiscount + personalDiscount;
+          const price = await plan.getPrice();
+          const userPrice = price - (userDiscount) * price / 100;
           await ctx.deleteMessage();
           await ctx.reply(
               `Вы выбрали продукт: ${product}
-${await plan.asString()}
-Вам необходимо оплатить его и отправить нам чек
+${await plan.asString()}\n` +
+            (userDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${userDiscount}%)\n` : '') +
+`Вам необходимо оплатить его и отправить нам чек
 Реквезиты для оплаты: <реквизиты>`,
               { reply_markup: paymentMenu }
           )
@@ -110,15 +116,27 @@ ${await plan.asString()}
     .back('Назад')
 
 const monthMenu = new Menu<ContextWithSession>('month-menu')
-    .dynamic(async (ctx) => {
-      const range = new MenuRange<ContextWithSession>()
-      for (const plan of await plans.all()) {
-        if (ctx.session.planType === 'one' && await plan.isSingle()) {
-          range.text(await plan.asString(), async ctx => {
-            await ctx.deleteMessage();
-            ctx.session.planId = await plan.id();
-            await ctx.reply(
-                'Adobe Creative Cloud  одно приложение:\n' +
+  .dynamic(async (ctx) => {
+    const range = new MenuRange<ContextWithSession>();
+
+    for (const plan of await plans.all()) {
+      const planString = await plan.asString();
+      const planId = await plan.id();
+      const isSingle = await plan.isSingle();
+      const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
+      const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
+      const userDiscount = refDiscount + personalDiscount;
+      const price = await plan.getPrice();
+      const userPrice = price - (userDiscount) * price / 100;
+
+      switch (ctx.session.planType) {
+        case 'one':
+          if (isSingle) {
+            range.text(planString, async ctx => {
+              await ctx.deleteMessage();
+              ctx.session.planId = planId;
+              await ctx.reply(
+                'Adobe Creative Cloud одно приложение:\n' +
                 '- Любая программа из всех на ваш выбор\n' +
                 '- 1000 генеративных кредитов (в случае выбора приложений с Firefly)\n' +
                 '- 2 ТБ облака\n' +
@@ -127,24 +145,37 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
                 '- Никаких ограничений\n' +
                 '- Постоянные обновления \n',
                 { reply_markup: productMenu }
-            );
-          }).row()
-        } else if (ctx.session.planType === 'all' && !(await plan.isSingle())) {
-          range.text(await plan.asString(), async ctx => {
-            await ctx.deleteMessage();
-            ctx.session.planId = await plan.id();
-            await ctx.reply(
-                `Вы выбрали тариф: ${await plan.asString()} рублей
-Вам необходимо оплатить его и отправить нам чек
-Реквезиты для оплаты: <реквизиты>`,
+              );
+            }).row();
+          }
+          break;
+        case 'all':
+          if (!isSingle) {
+            range.text(`${planString}`, async ctx => {
+              await ctx.deleteMessage();
+              ctx.session.planId = planId;
+              await ctx.reply(
+                `Вы выбрали тариф: ${planString}\n` +
+                (userDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${userDiscount}%)\n` : '') +
+                'Вам необходимо оплатить его и отправить нам чек\n' +
+                'Реквизиты для оплаты: <реквизиты>',
                 { reply_markup: paymentMenu }
-            )
-          }).row()
-        }
+              );
+            }).row();
+          }
+          break;
+        default:
+          break;
       }
-      return range;
-    })
-    .back('Назад')
+    }
+
+    return range;
+  })
+  .back('Назад', async ctx => {
+    await ctx.editMessageText('Отлично! Выберете нужный вам тариф.');
+  });
+
+
 monthMenu.register(paymentMenu);
 monthMenu.register(productMenu);
 
