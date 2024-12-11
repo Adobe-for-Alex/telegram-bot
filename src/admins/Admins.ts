@@ -18,7 +18,7 @@ export class FakeAdmins implements Admins {
     const adminId = this.admins[Math.floor(this.admins.length * Math.random())]
     if (adminId === undefined) throw new Error('For some reason adminId is undefined')
     return {
-      requestCheck: async (plan, user, messageId) => {
+      requestCheck: async (plan, user, _, messageId) => {
         await this.api.forwardMessage(adminId, await user.id(), messageId)
         await this.api.sendMessage(
           adminId,
