@@ -393,8 +393,7 @@ bot.hears('Реферальная система', async ctx => {
   const referralLink = referral.getReferralCode(await user.id());
   await ctx.reply(
     `Ваша реферальная ссылка: ${referralLink}\n` +
-    `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефераллов, ` +
-    `Ваша скидка составляет ${await referral.getDiscountPercent(`${ctx.from?.id}`)}%`
+    `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефералов`
   );
 })
 
