@@ -6,6 +6,7 @@ import Users from "../users/Users";
 import Plans from "../plans/Plans";
 import Sessions from "../sessions/Sessions";
 import DiscountService from "../discount/discount";
+import TextService from "../text/text";
 
 export default class AdminsInPrisma implements Admins {
   constructor(
@@ -39,8 +40,8 @@ export default class AdminsInPrisma implements Admins {
           `Запрос на проверку оплаты
 Пользователь: ${await user.id()}
 Тариф: ${await plan.asString()}
-Скидка: ${discount[0]}%
-С учётом скидки ${discount[1]}`,
+Персональная скидка: ${discount[0]}%
+С учётом персональной скидки ${discount[1]}`,
           {
             reply_markup: new InlineKeyboard()
               .text('Подтвердить', `approve-${request.paymentId}`)
@@ -50,7 +51,7 @@ export default class AdminsInPrisma implements Admins {
       }
     }
   }
-  middleware(plans: Plans, users: Users, sessions: Sessions, discounts: DiscountService): Middleware {
+  middleware(plans: Plans, users: Users, sessions: Sessions, discounts: DiscountService, text: TextService): Middleware {
     return async (ctx, next) => {
       const match = /^(approve|reject)-(.*)$/.exec(ctx.callbackQuery?.data || '')
       if (match === null) return next()
@@ -74,6 +75,7 @@ export default class AdminsInPrisma implements Admins {
 Данные вашей подписки:
 
 ${await user.subscrption().then(x => x?.asString())}`)
+          await ctx.api.sendMessage(userId, await text.getInstruction());
           await discounts.removePersonalDiscount(request.payment.user.id);
           break;
         }

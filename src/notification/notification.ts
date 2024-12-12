@@ -18,6 +18,14 @@ export default class NotificationService {
         await this.bot.api.sendMessage(userId, message);
     }
 
+    async notifyAdmins(message: string): Promise<void> {
+        const admins = await this.prisma.admin.findMany({});
+
+        for (const admin of admins) {
+            await this.bot.api.sendMessage(admin.userId, message);
+        }
+    }
+
     async notifyExpireSoon(): Promise<void> {
         const currentDate = new Date();
         const fiveDaysLater = new Date();

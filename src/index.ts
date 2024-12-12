@@ -11,6 +11,8 @@ import NotificationService from "./notification/notification";
 import DiscountService from "./discount/discount";
 import ReferralService from "./referral/referral";
 import cron from 'node-cron'
+import TextService from "./text/text";
+import SettingService from "./setting/setting";
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
@@ -24,6 +26,8 @@ const plans = new PlansInPrisma(prisma)
 const users = new UsersInPrisma(prisma)
 const discount = new DiscountService(prisma);
 const referral = new ReferralService(prisma);
+const text = new TextService(prisma);
+const setting = new SettingService(prisma);
 const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), prisma)
 
 interface Session {
@@ -33,6 +37,8 @@ interface Session {
   waitForText?: boolean
   waitForPrice?: boolean
   waitForDuration?: boolean
+  waitForAnswerFrom?: boolean
+  AnswerFromCallback?: () => void
   price?: number
   duration?: number
 }
@@ -47,7 +53,7 @@ bot.use((ctx, next) => {
 const notification = new NotificationService(prisma, bot as unknown as Bot);
 
 const admins = new AdminsInPrisma(bot.api, prisma)
-bot.use(admins.middleware(plans, users, sessions, discount))
+bot.use(admins.middleware(plans, users, sessions, discount, text))
 bot.use(discount.middleware());
 
 cron.schedule('*/1 * * * *', async () => {
@@ -59,8 +65,8 @@ cron.schedule('*/1 * * * *', async () => {
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
     .text('Отменить', async ctx => {
-      if (ctx.session.planId === undefined) return;
       await ctx.editMessageReplyMarkup( { reply_markup: new InlineKeyboard() });
+      if (ctx.session.planId === undefined) return;
       delete ctx.session.planId;
       await ctx.deleteMessage();
       await ctx.reply('Оплата отменена')
@@ -96,20 +102,34 @@ const productMenu = new Menu<ContextWithSession>('product-menu')
           if (!ctx.session.planId) return;
           const plan = await plans.withId(ctx.session.planId);
           if (!plan) return;
-          const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
           const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
-          const userDiscount = refDiscount + personalDiscount;
           const price = await plan.getPrice();
-          const userPrice = price - (userDiscount) * price / 100;
+          const userPrice = price - (personalDiscount) * price / 100;
           await ctx.deleteMessage();
-          await ctx.reply(
+          const isSetAskFrom = await setting.getAskFrom();
+          if (!isSetAskFrom) {
+            await ctx.reply(
               `Вы выбрали продукт: ${product}
 ${await plan.asString()}\n` +
-            (userDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${userDiscount}%)\n` : '') +
-`Вам необходимо оплатить его и отправить нам чек
+              (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
+              `Вам необходимо оплатить его и отправить нам чек
 Реквезиты для оплаты: <реквизиты>`,
               { reply_markup: paymentMenu }
-          )
+            )
+          } else {
+            await ctx.reply('Откуда вы о нас узнали?');
+            ctx.session.waitForAnswerFrom = true;
+            ctx.session.AnswerFromCallback = async () => {
+              await ctx.reply(
+                `Вы выбрали продукт: ${product}
+${await plan.asString()}\n` +
+                (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
+                `Вам необходимо оплатить его и отправить нам чек
+Реквезиты для оплаты: <реквизиты>`,
+                { reply_markup: paymentMenu }
+              )
+            }
+          }
         }).row()
       }
       return range;
@@ -140,11 +160,9 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
       const planId = await plan.id();
       const hasDiscount = await plan.hasDiscount();
       const isSingle = await plan.isSingle();
-      const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
       const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
-      const userDiscount = refDiscount + personalDiscount;
       const price = await plan.getPrice();
-      const userPrice = price - (userDiscount) * price / 100;
+      const userPrice = price - (personalDiscount) * price / 100;
 
       switch (ctx.session.planType) {
         case 'adminDelete':
@@ -187,15 +205,32 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
         case 'all':
           if (!isSingle) {
             range.text(`${planString}`, async ctx => {
-              await ctx.deleteMessage();
-              ctx.session.planId = planId;
-              await ctx.reply(
-                `Вы выбрали тариф: ${planString}\n` +
-                (userDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${userDiscount}%)\n` : '') +
-                'Вам необходимо оплатить его и отправить нам чек\n' +
-                'Реквизиты для оплаты: <реквизиты>',
-                { reply_markup: paymentMenu }
-              );
+              const isSetAskFrom = await setting.getAskFrom();
+              if (!isSetAskFrom) {
+                await ctx.deleteMessage();
+                ctx.session.planId = planId;
+                await ctx.reply(
+                  `Вы выбрали тариф: ${planString}\n` +
+                  (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+                  'Вам необходимо оплатить его и отправить нам чек\n' +
+                  'Реквизиты для оплаты: <реквизиты>',
+                  { reply_markup: paymentMenu }
+                );
+              } else {
+                await ctx.deleteMessage();
+                ctx.session.planId = planId;
+                await ctx.reply('Откуда вы о нас узнали?');
+                ctx.session.waitForAnswerFrom = true;
+                ctx.session.AnswerFromCallback = async () => {
+                  await ctx.reply(
+                    `Вы выбрали тариф: ${planString}\n` +
+                    (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+                    'Вам необходимо оплатить его и отправить нам чек\n' +
+                    'Реквизиты для оплаты: <реквизиты>',
+                    { reply_markup: paymentMenu }
+                  );
+                }
+              }
             }).row();
           }
           break;
@@ -238,24 +273,40 @@ const typeMenu = new Menu<ContextWithSession>('type-menu')
           { reply_markup: monthMenu }
       )
     }).row()
+  .text('Купить через менеджера', async ctx => {
+    await ctx.editMessageReplyMarkup({reply_markup: new InlineKeyboard() });
+    await ctx.reply(`Аккаунт менеджера ${await text.getSupport()}`);
+  })
 typeMenu.register(monthMenu);
 bot.use(typeMenu.middleware());
 
+const start_menu = new Keyboard()
+  .text('Текущая подписка📝').row()
+  .text('Оплатить/Продлить подписку💸').row()
+  .text('Сотрудничество. Дропшиппинг⚙️').row()
+  .text('Онлайн поддержка👨🏽‍💻').row();
+
+setting.getReferrals().then((isSet) => {
+  if (!isSet) return;
+  start_menu.text('Реферальная система').row()
+    .resized();
+})
+
 bot.command('start', async ctx => {
   const referralCode = ctx.message?.text.split(' ')[1];
-  if (referralCode) {
-    await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1');
+  if (await setting.getSetting('referrals') ) {
+    if (referralCode) {
+      if (await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1')) {
+        await discount.givePersonalDiscount(referralCode, 25);
+        await notification.privateMessage(referralCode, 'Вы пригласили рефералаа, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
+      }
+    }
   }
+
   await ctx.reply(
       'Привет! Добро пожаловать в наш сервис.',
       {
-        reply_markup: new Keyboard()
-          .text('Текущая подписка📝').row()
-          .text('Оплатить/Продлить подписку💸').row()
-          .text('Сотрудничество. Дропшиппинг⚙️').row()
-          .text('Онлайн поддержка👨🏽‍💻').row()
-          .text('Реферальная система').row()
-          .resized()
+        reply_markup: start_menu
       }
   )
 })
@@ -347,56 +398,42 @@ bot.hears('Текущая подписка📝', async ctx => {
 })
 
 bot.hears('Оплатить/Продлить подписку💸', async ctx => {
+  let isSetTypes = await setting.getTypes();
+  let reply_menu: Menu<ContextWithSession>;
+  if (isSetTypes) {
+    reply_menu = typeMenu;
+  } else {
+    ctx.session.planType = "all";
+    reply_menu = monthMenu;
+  }
   await ctx.reply(
       'Отлично! Выберете нужный вам тариф.',
-      { reply_markup: typeMenu }
+      { reply_markup: reply_menu }
   )
 })
 
 bot.hears('Сотрудничество. Дропшиппинг⚙️', async ctx => {
-  await ctx.reply(
-      'Добрый день! 👋 Команда SoftPlus рада приветствовать вас!\n' +
-      '\n' +
-      'Мы всегда открыты к сотрудничеству и ищем новых партнёров, готовых зарабатывать вместе с нами. Наша система дропшиппинга — это модель, при которой вы реализуете наш товар через свои платформы: Авито, социальные сети, собственный сайт, маркетплейсы или любые другие удобные для вас каналы.\n' +
-      'Вы полностью контролируете свои продажи, самостоятельно устанавливаете цены и зарабатываете на своей разнице.\n' +
-      '\n' +
-      'Для вас будет создан индивидуальный бот, который автоматизирует весь процесс:\n' +
-      ' • создаёт аккаунты для ваших клиентов,\n' +
-      ' • отправляет их напрямую,\n' +
-      ' • выдаёт новые в случае форс-мажоров,\n' +
-      ' • продлевает подписки и уведомляет клиентов.\n' +
-      '\n' +
-      'Всё, что от вас требуется, — направлять клиентов в вашего персонального бота, а остальное мы берём на себя.\n' +
-      '\n' +
-      'Что мы предлагаем:\n' +
-      ' • 📦 Автоматизированная система дропшиппинга: Система сама автоматически будет выдавать аккаунты клиентам, принимать платежи, продлевать, присылать данные и инструкцию, осуществлять замены проблемных аккаунтов, если такие будут!\n' +
-      ' • 💰 Индивидуальные цены: Для наших партнеров действуют специальные условия на покупку аккаунтов.\n' +
-      ' • 🚀 Полная поддержка: Мы готовы помочь вам в любое время и обеспечить надежное сотрудничество.\n' +
-      '\n' +
-      'Мы будем рады видеть вас в числе наших партнеров!\n' +
-      'Для вопросов по сотрудничеству обращайтесь:\n' +
-      '📩 @softplus_ww (с 08:00 до 23:00 по МСК ежедневно).\n' +
-      '\n' +
-      'С уважением,\n' +
-      'Команда SoftPlus'
-  )
+  await ctx.reply(await text.getDropShipping());
 })
 
 bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
   await ctx.reply(
-      'Аккаунт поддержки: @softplus_ww'
+      `Аккаунт поддержки: ${await text.getSupport()}`
   )
 })
 
 bot.hears('Реферальная система', async ctx => {
+  if (!(await setting.getReferrals())) {
+    return;
+  }
   const user = await users.withId(`${ctx.from?.id}`);
   const referralLink = referral.getReferralCode(await user.id());
   await ctx.reply(
     `Ваша реферальная ссылка: ${referralLink}\n` +
-    `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефераллов, ` +
-    `Ваша скидка составляет ${await referral.getDiscountPercent(`${ctx.from?.id}`)}%`
+    `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефералов`
   );
 })
+
 
 bot.on(['message:document', 'message:photo'], async ctx => {
   const planId = ctx.session.planId
@@ -410,13 +447,12 @@ bot.on(['message:document', 'message:photo'], async ctx => {
   try {
     const filePath = await ctx.getFile().then(x => x.file_path)
     if (filePath === undefined) throw new Error('Failed to get file_path of document')
-    const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
     const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
     const plan = await plans.withId(ctx.session.planId ?? -1);
     if (!plan) return;
     const price = await plan.getPrice();
-    const priceWithRefDiscount = price - (refDiscount + personalDiscount) * price / 100;
-    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), [refDiscount + personalDiscount, priceWithRefDiscount], ctx.message.message_id, filePath)
+    const priceWithRefDiscount = price - (personalDiscount) * price / 100;
+    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), [personalDiscount, priceWithRefDiscount], ctx.message.message_id, filePath)
     delete ctx.session.planId
   } catch (e) {
     await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. '
@@ -445,7 +481,14 @@ bot.hears(/^.+$/, async ctx => {
     const user = await users.withId(ctx.chatId.toString());
     if (!await user.isAdmin()) return;
     if (!ctx.message) return;
-    if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration) return;
+    if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration && !ctx.session.waitForAnswerFrom) return;
+    if (ctx.session.waitForAnswerFrom) {
+      if (!ctx.session.AnswerFromCallback)
+        return;
+      ctx.session.AnswerFromCallback();
+      await notification.notifyAdmins(`Пользователь ${ctx.chatId?.toString()} сказал, что узнал о нас от: ${ctx.message.text}`);
+      ctx.session.waitForAnswerFrom = false;
+    }
     if (ctx.session.waitForText) {
       await notification.globalMessage(`${ctx.message.text}`);
       ctx.session.waitForText = false;

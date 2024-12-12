@@ -111,3 +111,13 @@ model Discount {
   expireAt DateTime
   plan     Plan     @relation(fields: [id], references: [id])
 }
+
+model Text {
+  key   String @id
+  value String
+}
+
+model Setting {
+  key   String @id
+  value Json
+}

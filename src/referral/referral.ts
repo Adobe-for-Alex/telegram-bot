@@ -5,12 +5,17 @@ export default class ReferralService {
     private readonly prisma: PrismaClient,
   ) { }
 
-  async createReferral(referralCode: string, referralId: string) {
+  async createReferral(referralCode: string, referralId: string): Promise<boolean> {
     const referral = await this.prisma.user.findUnique({ where: { id: referralId } });
-    if (referral) return;
+    if (!referral) return false;
+    if (referral.referrerId) return false;
     const referrer = await this.prisma.user.findUnique({ where: { id:referralCode } });
-    if (!referrer) return;
-    await this.prisma.user.create({data: { id: referralId, referrerId: referralCode }});
+    if (!referrer) return false;
+    await this.prisma.user.update({
+      where: { id: referralId },
+      data: { referrerId: referralCode }
+    });
+    return true;
   }
 
   getReferralCode(userId: string) {
