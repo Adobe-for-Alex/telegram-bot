@@ -116,3 +116,8 @@ model Text {
   key   String @id
   value String
 }
+
+model Setting {
+  key   String @id
+  value Json
+}
