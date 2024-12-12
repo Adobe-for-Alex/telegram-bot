@@ -236,7 +236,7 @@ const typeMenu = new Menu<ContextWithSession>('type-menu')
     }).row()
   .text('Купить через менеджера', async ctx => {
     await ctx.editMessageReplyMarkup({reply_markup: new InlineKeyboard() });
-    await ctx.reply(`Аккаунт менеджера ${textData.support}`);
+    await ctx.reply(`Аккаунт менеджера @softplus_ww`);
   })
 typeMenu.register(monthMenu);
 bot.use(typeMenu.middleware());
