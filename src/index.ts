@@ -486,6 +486,7 @@ bot.hears(/^.+$/, async ctx => {
       if (!ctx.session.AnswerFromCallback)
         return;
       ctx.session.AnswerFromCallback();
+      await notification.notifyAdmins(`Пользователь ${ctx.chatId?.toString()} сказал, что узнал о нас от: ${ctx.message.text}`);
       ctx.session.waitForAnswerFrom = false;
     }
     if (ctx.session.waitForText) {
