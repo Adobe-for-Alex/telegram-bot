@@ -59,8 +59,8 @@ cron.schedule('*/1 * * * *', async () => {
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
     .text('Отменить', async ctx => {
-      if (ctx.session.planId === undefined) return;
       await ctx.editMessageReplyMarkup( { reply_markup: new InlineKeyboard() });
+      if (ctx.session.planId === undefined) return;
       delete ctx.session.planId;
       await ctx.deleteMessage();
       await ctx.reply('Оплата отменена')
@@ -96,16 +96,14 @@ const productMenu = new Menu<ContextWithSession>('product-menu')
           if (!ctx.session.planId) return;
           const plan = await plans.withId(ctx.session.planId);
           if (!plan) return;
-          const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
           const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
-          const userDiscount = refDiscount + personalDiscount;
           const price = await plan.getPrice();
-          const userPrice = price - (userDiscount) * price / 100;
+          const userPrice = price - (personalDiscount) * price / 100;
           await ctx.deleteMessage();
           await ctx.reply(
               `Вы выбрали продукт: ${product}
 ${await plan.asString()}\n` +
-            (userDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${userDiscount}%)\n` : '') +
+            (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
 `Вам необходимо оплатить его и отправить нам чек
 Реквезиты для оплаты: <реквизиты>`,
               { reply_markup: paymentMenu }
@@ -140,11 +138,9 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
       const planId = await plan.id();
       const hasDiscount = await plan.hasDiscount();
       const isSingle = await plan.isSingle();
-      const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
       const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
-      const userDiscount = refDiscount + personalDiscount;
       const price = await plan.getPrice();
-      const userPrice = price - (userDiscount) * price / 100;
+      const userPrice = price - (personalDiscount) * price / 100;
 
       switch (ctx.session.planType) {
         case 'adminDelete':
@@ -191,7 +187,7 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
               ctx.session.planId = planId;
               await ctx.reply(
                 `Вы выбрали тариф: ${planString}\n` +
-                (userDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${userDiscount}%)\n` : '') +
+                (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
                 'Вам необходимо оплатить его и отправить нам чек\n' +
                 'Реквизиты для оплаты: <реквизиты>',
                 { reply_markup: paymentMenu }
@@ -244,7 +240,10 @@ bot.use(typeMenu.middleware());
 bot.command('start', async ctx => {
   const referralCode = ctx.message?.text.split(' ')[1];
   if (referralCode) {
-    await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1');
+    if (await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1')) {
+      await discount.givePersonalDiscount(referralCode, 25);
+      await notification.privateMessage(referralCode, 'Вы пригласили рефералаа, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
+    }
   }
   await ctx.reply(
       'Привет! Добро пожаловать в наш сервис.',
@@ -409,13 +408,12 @@ bot.on(['message:document', 'message:photo'], async ctx => {
   try {
     const filePath = await ctx.getFile().then(x => x.file_path)
     if (filePath === undefined) throw new Error('Failed to get file_path of document')
-    const refDiscount = await referral.getDiscountPercent(`${ctx.from?.id}`);
     const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
     const plan = await plans.withId(ctx.session.planId ?? -1);
     if (!plan) return;
     const price = await plan.getPrice();
-    const priceWithRefDiscount = price - (refDiscount + personalDiscount) * price / 100;
-    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), [refDiscount + personalDiscount, priceWithRefDiscount], ctx.message.message_id, filePath)
+    const priceWithRefDiscount = price - (personalDiscount) * price / 100;
+    await admin.requestCheck(plan, await users.withId(`${ctx.from.id}`), [personalDiscount, priceWithRefDiscount], ctx.message.message_id, filePath)
     delete ctx.session.planId
   } catch (e) {
     await ctx.reply('Ошибка! Что-то пошло не так, когда мы направляли запрос администратору. '

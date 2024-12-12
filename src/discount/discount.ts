@@ -72,12 +72,12 @@ export default class DiscountService {
     return users;
   }
 
-  async givePersonalDiscount(userId: string) {
+  async givePersonalDiscount(userId: string, percent: number = 10) {
     const expireAt = new Date(new Date().getTime() + 4 * 24 * 60 * 60 * 1000);
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        personalDiscount: 10,
+        personalDiscount: percent,
         personalDiscountExpireAt: expireAt
       }
     });

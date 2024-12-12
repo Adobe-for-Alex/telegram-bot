@@ -39,8 +39,8 @@ export default class AdminsInPrisma implements Admins {
           `Запрос на проверку оплаты
 Пользователь: ${await user.id()}
 Тариф: ${await plan.asString()}
-Скидка: ${discount[0]}%
-С учётом скидки ${discount[1]}`,
+Персональная скидка: ${discount[0]}%
+С учётом персональной скидки ${discount[1]}`,
           {
             reply_markup: new InlineKeyboard()
               .text('Подтвердить', `approve-${request.paymentId}`)
