@@ -12,6 +12,7 @@ import DiscountService from "./discount/discount";
 import ReferralService from "./referral/referral";
 import cron from 'node-cron'
 import TextService from "./text/text";
+import SettingService from "./setting/setting";
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
@@ -26,6 +27,7 @@ const users = new UsersInPrisma(prisma)
 const discount = new DiscountService(prisma);
 const referral = new ReferralService(prisma);
 const text = new TextService(prisma);
+const setting = new SettingService(prisma);
 const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), prisma)
 
 interface Session {
@@ -35,6 +37,8 @@ interface Session {
   waitForText?: boolean
   waitForPrice?: boolean
   waitForDuration?: boolean
+  waitForAnswerFrom?: boolean
+  AnswerFromCallback?: () => void
   price?: number
   duration?: number
 }
@@ -102,14 +106,30 @@ const productMenu = new Menu<ContextWithSession>('product-menu')
           const price = await plan.getPrice();
           const userPrice = price - (personalDiscount) * price / 100;
           await ctx.deleteMessage();
-          await ctx.reply(
+          const isSetAskFrom = await setting.getAskFrom();
+          if (!isSetAskFrom) {
+            await ctx.reply(
               `Вы выбрали продукт: ${product}
 ${await plan.asString()}\n` +
-            (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
-`Вам необходимо оплатить его и отправить нам чек
+              (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
+              `Вам необходимо оплатить его и отправить нам чек
 Реквезиты для оплаты: <реквизиты>`,
               { reply_markup: paymentMenu }
-          )
+            )
+          } else {
+            await ctx.reply('Откуда вы о нас узнали?');
+            ctx.session.waitForAnswerFrom = true;
+            ctx.session.AnswerFromCallback = async () => {
+              await ctx.reply(
+                `Вы выбрали продукт: ${product}
+${await plan.asString()}\n` +
+                (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
+                `Вам необходимо оплатить его и отправить нам чек
+Реквезиты для оплаты: <реквизиты>`,
+                { reply_markup: paymentMenu }
+              )
+            }
+          }
         }).row()
       }
       return range;
@@ -185,15 +205,32 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
         case 'all':
           if (!isSingle) {
             range.text(`${planString}`, async ctx => {
-              await ctx.deleteMessage();
-              ctx.session.planId = planId;
-              await ctx.reply(
-                `Вы выбрали тариф: ${planString}\n` +
-                (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
-                'Вам необходимо оплатить его и отправить нам чек\n' +
-                'Реквизиты для оплаты: <реквизиты>',
-                { reply_markup: paymentMenu }
-              );
+              const isSetAskFrom = await setting.getAskFrom();
+              if (!isSetAskFrom) {
+                await ctx.deleteMessage();
+                ctx.session.planId = planId;
+                await ctx.reply(
+                  `Вы выбрали тариф: ${planString}\n` +
+                  (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+                  'Вам необходимо оплатить его и отправить нам чек\n' +
+                  'Реквизиты для оплаты: <реквизиты>',
+                  { reply_markup: paymentMenu }
+                );
+              } else {
+                await ctx.deleteMessage();
+                ctx.session.planId = planId;
+                await ctx.reply('Откуда вы о нас узнали?');
+                ctx.session.waitForAnswerFrom = true;
+                ctx.session.AnswerFromCallback = async () => {
+                  await ctx.reply(
+                    `Вы выбрали тариф: ${planString}\n` +
+                    (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+                    'Вам необходимо оплатить его и отправить нам чек\n' +
+                    'Реквизиты для оплаты: <реквизиты>',
+                    { reply_markup: paymentMenu }
+                  );
+                }
+              }
             }).row();
           }
           break;
@@ -243,24 +280,33 @@ const typeMenu = new Menu<ContextWithSession>('type-menu')
 typeMenu.register(monthMenu);
 bot.use(typeMenu.middleware());
 
+const start_menu = new Keyboard()
+  .text('Текущая подписка📝').row()
+  .text('Оплатить/Продлить подписку💸').row()
+  .text('Сотрудничество. Дропшиппинг⚙️').row()
+  .text('Онлайн поддержка👨🏽‍💻').row();
+
+setting.getReferrals().then((isSet) => {
+  if (!isSet) return;
+  start_menu.text('Реферальная система').row()
+    .resized();
+})
+
 bot.command('start', async ctx => {
   const referralCode = ctx.message?.text.split(' ')[1];
-  if (referralCode) {
-    if (await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1')) {
-      await discount.givePersonalDiscount(referralCode, 25);
-      await notification.privateMessage(referralCode, 'Вы пригласили рефералаа, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
+  if (await setting.getSetting('referrals') ) {
+    if (referralCode) {
+      if (await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1')) {
+        await discount.givePersonalDiscount(referralCode, 25);
+        await notification.privateMessage(referralCode, 'Вы пригласили рефералаа, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
+      }
     }
   }
+
   await ctx.reply(
       'Привет! Добро пожаловать в наш сервис.',
       {
-        reply_markup: new Keyboard()
-          .text('Текущая подписка📝').row()
-          .text('Оплатить/Продлить подписку💸').row()
-          .text('Сотрудничество. Дропшиппинг⚙️').row()
-          .text('Онлайн поддержка👨🏽‍💻').row()
-          .text('Реферальная система').row()
-          .resized()
+        reply_markup: start_menu
       }
   )
 })
@@ -352,9 +398,17 @@ bot.hears('Текущая подписка📝', async ctx => {
 })
 
 bot.hears('Оплатить/Продлить подписку💸', async ctx => {
+  let isSetTypes = await setting.getTypes();
+  let reply_menu: Menu<ContextWithSession>;
+  if (isSetTypes) {
+    reply_menu = typeMenu;
+  } else {
+    ctx.session.planType = "all";
+    reply_menu = monthMenu;
+  }
   await ctx.reply(
       'Отлично! Выберете нужный вам тариф.',
-      { reply_markup: typeMenu }
+      { reply_markup: reply_menu }
   )
 })
 
@@ -369,6 +423,9 @@ bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
 })
 
 bot.hears('Реферальная система', async ctx => {
+  if (!(await setting.getReferrals())) {
+    return;
+  }
   const user = await users.withId(`${ctx.from?.id}`);
   const referralLink = referral.getReferralCode(await user.id());
   await ctx.reply(
@@ -376,6 +433,7 @@ bot.hears('Реферальная система', async ctx => {
     `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефералов`
   );
 })
+
 
 bot.on(['message:document', 'message:photo'], async ctx => {
   const planId = ctx.session.planId
@@ -423,7 +481,13 @@ bot.hears(/^.+$/, async ctx => {
     const user = await users.withId(ctx.chatId.toString());
     if (!await user.isAdmin()) return;
     if (!ctx.message) return;
-    if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration) return;
+    if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration && !ctx.session.waitForAnswerFrom) return;
+    if (ctx.session.waitForAnswerFrom) {
+      if (!ctx.session.AnswerFromCallback)
+        return;
+      ctx.session.AnswerFromCallback();
+      ctx.session.waitForAnswerFrom = false;
+    }
     if (ctx.session.waitForText) {
       await notification.globalMessage(`${ctx.message.text}`);
       ctx.session.waitForText = false;
