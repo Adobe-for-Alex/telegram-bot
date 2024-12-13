@@ -8,9 +8,7 @@ export default class SettingService {
   async getSetting(key: string): Promise<boolean> {
     const text = await this.prisma.setting.findUnique({ where: { key: key } });
     if (!text) return false;
-    console.log(typeof text.value);
     if (typeof text.value === "boolean") {
-      console.log(text.value);
       return text.value;
     }
     return false;
