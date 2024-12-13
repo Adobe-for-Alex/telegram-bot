@@ -245,9 +245,55 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
     await ctx.editMessageText('Отлично! Выберете нужный вам тариф.');
   });
 
+const monthMenuDropshipping = new Menu<ContextWithSession>('month-menu-dropshipping')
+  .dynamic(async (ctx) => {
+    const range = new MenuRange<ContextWithSession>();
+
+    for (const plan of await plans.all()) {
+      const planString = await plan.asString();
+      const planId = await plan.id();
+      const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
+      const price = await plan.getPrice();
+      const userPrice = price - (personalDiscount) * price / 100;
+
+      range.text(`${planString}`, async ctx => {
+        const isSetAskFrom = await setting.getAskFrom();
+        if (!isSetAskFrom) {
+          await ctx.deleteMessage();
+          ctx.session.planId = planId;
+          await ctx.reply(
+            `Вы выбрали тариф: ${planString}\n` +
+            (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+            'Вам необходимо оплатить его и отправить нам чек\n' +
+            'Реквизиты для оплаты: <реквизиты>',
+            {reply_markup: paymentMenu}
+          );
+        } else {
+          await ctx.deleteMessage();
+          ctx.session.planId = planId;
+          await ctx.reply('Откуда вы о нас узнали?');
+          ctx.session.waitForAnswerFrom = true;
+          ctx.session.AnswerFromCallback = async () => {
+            await ctx.reply(
+              `Вы выбрали тариф: ${planString}\n` +
+              (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+              'Вам необходимо оплатить его и отправить нам чек\n' +
+              'Реквизиты для оплаты: <реквизиты>',
+              {reply_markup: paymentMenu}
+            );
+          }
+        }
+      }).row();
+    }
+
+    return range;
+  });
+
 
 monthMenu.register(paymentMenu);
 monthMenu.register(productMenu);
+
+monthMenuDropshipping.register(paymentMenu);
 
 const typeMenu = new Menu<ContextWithSession>('type-menu')
     .text('Adobe CC все приложения + ИИ', async ctx => {
@@ -404,7 +450,7 @@ bot.hears('Оплатить/Продлить подписку💸', async ctx =>
     reply_menu = typeMenu;
   } else {
     ctx.session.planType = "all";
-    reply_menu = monthMenu;
+    reply_menu = monthMenuDropshipping;
   }
   await ctx.reply(
       'Отлично! Выберете нужный вам тариф.',
