@@ -61,6 +61,7 @@ cron.schedule('*/1 * * * *', async () => {
   await notification.notifyExpired();
   await discount.checkForPersonalDiscounts(notification);
   await discount.checkForTemporaryDiscounts(notification);
+  await discount.offerRenewSubscription(notification);
 });
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
