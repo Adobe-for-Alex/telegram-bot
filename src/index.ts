@@ -344,7 +344,7 @@ bot.command('start', async ctx => {
     if (referralCode) {
       if (await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1')) {
         await discount.givePersonalDiscount(referralCode, 25);
-        await notification.privateMessage(referralCode, 'Вы пригласили рефералаа, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
+        await notification.privateMessage(referralCode, 'Вы пригласили реферала, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
       }
     }
   }
