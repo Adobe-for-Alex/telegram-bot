@@ -357,81 +357,6 @@ bot.command('start', async ctx => {
   )
 })
 
-bot.command('admin', async ctx => {
-    const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) {
-        return;
-    }
-    await ctx.reply(
-        'Админ меню.',
-        {
-            reply_markup: new Keyboard()
-                .text('Глобальное сообщение').row()
-                .text('Временная скидка').row()
-                .text('Текущие скидки').row()
-                .resized()
-        }
-    )
-})
-
-const declineMenu = new Menu<ContextWithSession>('decline')
-  .text('Отменить', async ctx => {
-    ctx.session.waitForText = false;
-    await ctx.deleteMessage();
-  })
-bot.use(declineMenu.middleware());
-
-bot.hears('Глобальное сообщение', async ctx => {
-  ctx.session.waitForText = false;
-  ctx.session.waitForPrice = false;
-  ctx.session.waitForDuration = false;
-    const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) {
-        return;
-    }
-    ctx.session.waitForText = true;
-    await ctx.reply(
-        'Введите сообщение.',
-        {
-            reply_markup: declineMenu
-        }
-    );
-})
-
-bot.hears('Временная скидка', async ctx => {
-  ctx.session.waitForText = false;
-  ctx.session.waitForPrice = false;
-  ctx.session.waitForDuration = false;
-    const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) {
-        return;
-    }
-    ctx.session.planType = 'admin';
-    await ctx.reply(
-        'Выберите тариф.',
-        {
-            reply_markup: monthMenu
-        }
-    );
-})
-
-bot.hears('Текущие скидки', async ctx => {
-  ctx.session.waitForText = false;
-  ctx.session.waitForPrice = false;
-  ctx.session.waitForDuration = false;
-  const user = await users.withId(ctx.chatId.toString());
-  if (!await user.isAdmin()) {
-    return;
-  }
-  ctx.session.planType = 'adminDelete';
-  await ctx.reply(
-    'Выберите тариф.',
-    {
-      reply_markup: monthMenu
-    }
-  );
-})
-
 bot.hears('Текущая подписка📝', async ctx => {
   if (ctx.from === undefined) return
   const user = await users.withId(`${ctx.from.id}`)
@@ -480,6 +405,80 @@ bot.hears('Реферальная система', async ctx => {
   );
 })
 
+bot.command('admin', async ctx => {
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  await ctx.reply(
+    'Админ меню.',
+    {
+      reply_markup: new Keyboard()
+        .text('Глобальное сообщение').row()
+        .text('Временная скидка').row()
+        .text('Текущие скидки').row()
+        .resized()
+    }
+  )
+})
+
+const declineMenu = new Menu<ContextWithSession>('decline')
+  .text('Отменить', async ctx => {
+    ctx.session.waitForText = false;
+    await ctx.deleteMessage();
+  })
+bot.use(declineMenu.middleware());
+
+bot.hears('Глобальное сообщение', async ctx => {
+  ctx.session.waitForText = false;
+  ctx.session.waitForPrice = false;
+  ctx.session.waitForDuration = false;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  ctx.session.waitForText = true;
+  await ctx.reply(
+    'Введите сообщение.',
+    {
+      reply_markup: declineMenu
+    }
+  );
+})
+
+bot.hears('Временная скидка', async ctx => {
+  ctx.session.waitForText = false;
+  ctx.session.waitForPrice = false;
+  ctx.session.waitForDuration = false;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  ctx.session.planType = 'admin';
+  await ctx.reply(
+    'Выберите тариф.',
+    {
+      reply_markup: monthMenu
+    }
+  );
+})
+
+bot.hears('Текущие скидки', async ctx => {
+  ctx.session.waitForText = false;
+  ctx.session.waitForPrice = false;
+  ctx.session.waitForDuration = false;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  ctx.session.planType = 'adminDelete';
+  await ctx.reply(
+    'Выберите тариф.',
+    {
+      reply_markup: monthMenu
+    }
+  );
+})
 
 bot.on(['message:document', 'message:photo'], async ctx => {
   const planId = ctx.session.planId
