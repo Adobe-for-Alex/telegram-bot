@@ -72,7 +72,7 @@ const paymentMenu = new Menu<ContextWithSession>('payment-menu')
       await ctx.reply('Оплата отменена')
     }).row()
     .back('Назад', async ctx => {
-      await ctx.editMessageText('Отлично! Выберете нужный вам тариф.')
+      await ctx.editMessageText('Отлично! Выберите нужный вам тариф.')
     })
 
 const products = [
@@ -242,7 +242,7 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
     return range;
   })
   .back('Назад', async ctx => {
-    await ctx.editMessageText('Отлично! Выберете нужный вам тариф.');
+    await ctx.editMessageText('Отлично! Выберите нужный вам тариф.');
   });
 
 const monthMenuDropshipping = new Menu<ContextWithSession>('month-menu-dropshipping')
@@ -453,7 +453,7 @@ bot.hears('Оплатить/Продлить подписку💸', async ctx =>
     reply_menu = monthMenuDropshipping;
   }
   await ctx.reply(
-      'Отлично! Выберете нужный вам тариф.',
+      'Отлично! Выберите нужный вам тариф.',
       { reply_markup: reply_menu }
   )
 })
