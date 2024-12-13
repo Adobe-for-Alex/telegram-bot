@@ -359,6 +359,7 @@ bot.command('start', async ctx => {
 
 bot.hears('Текущая подписка📝', async ctx => {
   if (ctx.from === undefined) return
+  ctx.session.waitForAnswerFrom = false;
   const user = await users.withId(`${ctx.from.id}`)
   const subscription = await user.subscrption()
   if (subscription === undefined || await subscription.ended() < new Date()) {
@@ -369,6 +370,7 @@ bot.hears('Текущая подписка📝', async ctx => {
 })
 
 bot.hears('Оплатить/Продлить подписку💸', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
   let isSetTypes = await setting.getTypes();
   let reply_menu: Menu<ContextWithSession>;
   if (isSetTypes) {
@@ -384,16 +386,19 @@ bot.hears('Оплатить/Продлить подписку💸', async ctx =>
 })
 
 bot.hears('Сотрудничество. Дропшиппинг⚙️', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
   await ctx.reply(await text.getDropShipping());
 })
 
 bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
   await ctx.reply(
       `Аккаунт поддержки: ${await text.getSupport()}`
   )
 })
 
 bot.hears('Реферальная система', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
   if (!(await setting.getReferrals())) {
     return;
   }
