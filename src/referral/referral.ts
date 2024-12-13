@@ -18,8 +18,8 @@ export default class ReferralService {
     return true;
   }
 
-  getReferralCode(userId: string) {
-    return `https://t.me/kostanchik_bot?start=${userId}`;
+  getReferralCode(botLink: string, userId: string) {
+    return `https://${botLink}?start=${userId}`;
   }
 
   async getReferralsCount(referrerId: string) {

@@ -61,6 +61,7 @@ cron.schedule('*/1 * * * *', async () => {
   await notification.notifyExpired();
   await discount.checkForPersonalDiscounts(notification);
   await discount.checkForTemporaryDiscounts(notification);
+  await discount.offerRenewSubscription(notification);
 });
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
@@ -72,7 +73,7 @@ const paymentMenu = new Menu<ContextWithSession>('payment-menu')
       await ctx.reply('Оплата отменена')
     }).row()
     .back('Назад', async ctx => {
-      await ctx.editMessageText('Отлично! Выберете нужный вам тариф.')
+      await ctx.editMessageText('Отлично! Выберите нужный вам тариф.')
     })
 
 const products = [
@@ -242,12 +243,58 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
     return range;
   })
   .back('Назад', async ctx => {
-    await ctx.editMessageText('Отлично! Выберете нужный вам тариф.');
+    await ctx.editMessageText('Отлично! Выберите нужный вам тариф.');
+  });
+
+const monthMenuDropshipping = new Menu<ContextWithSession>('month-menu-dropshipping')
+  .dynamic(async (ctx) => {
+    const range = new MenuRange<ContextWithSession>();
+
+    for (const plan of await plans.all()) {
+      const planString = await plan.asString();
+      const planId = await plan.id();
+      const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
+      const price = await plan.getPrice();
+      const userPrice = price - (personalDiscount) * price / 100;
+
+      range.text(`${planString}`, async ctx => {
+        const isSetAskFrom = await setting.getAskFrom();
+        if (!isSetAskFrom) {
+          await ctx.deleteMessage();
+          ctx.session.planId = planId;
+          await ctx.reply(
+            `Вы выбрали тариф: ${planString}\n` +
+            (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+            'Вам необходимо оплатить его и отправить нам чек\n' +
+            'Реквизиты для оплаты: <реквизиты>',
+            {reply_markup: paymentMenu}
+          );
+        } else {
+          await ctx.deleteMessage();
+          ctx.session.planId = planId;
+          await ctx.reply('Откуда вы о нас узнали?');
+          ctx.session.waitForAnswerFrom = true;
+          ctx.session.AnswerFromCallback = async () => {
+            await ctx.reply(
+              `Вы выбрали тариф: ${planString}\n` +
+              (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
+              'Вам необходимо оплатить его и отправить нам чек\n' +
+              'Реквизиты для оплаты: <реквизиты>',
+              {reply_markup: paymentMenu}
+            );
+          }
+        }
+      }).row();
+    }
+
+    return range;
   });
 
 
 monthMenu.register(paymentMenu);
 monthMenu.register(productMenu);
+
+monthMenuDropshipping.register(paymentMenu);
 
 const typeMenu = new Menu<ContextWithSession>('type-menu')
     .text('Adobe CC все приложения + ИИ', async ctx => {
@@ -298,7 +345,7 @@ bot.command('start', async ctx => {
     if (referralCode) {
       if (await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1')) {
         await discount.givePersonalDiscount(referralCode, 25);
-        await notification.privateMessage(referralCode, 'Вы пригласили рефералаа, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
+        await notification.privateMessage(referralCode, 'Вы пригласили реферала, вам положена скидка 25% на следующую покупку, успейте в течении 4 дней!');
       }
     }
   }
@@ -311,21 +358,74 @@ bot.command('start', async ctx => {
   )
 })
 
+bot.hears('Текущая подписка📝', async ctx => {
+  if (ctx.from === undefined) return
+  ctx.session.waitForAnswerFrom = false;
+  const user = await users.withId(`${ctx.from.id}`)
+  const subscription = await user.subscrption()
+  if (subscription === undefined || await subscription.ended() < new Date()) {
+    await ctx.reply('У вас сейчас нету подписки')
+    return
+  }
+  await ctx.reply(await subscription.asString())
+})
+
+bot.hears('Оплатить/Продлить подписку💸', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
+  let isSetTypes = await setting.getTypes();
+  let reply_menu: Menu<ContextWithSession>;
+  if (isSetTypes) {
+    reply_menu = typeMenu;
+  } else {
+    ctx.session.planType = "all";
+    reply_menu = monthMenuDropshipping;
+  }
+  await ctx.reply(
+      'Отлично! Выберите нужный вам тариф.',
+      { reply_markup: reply_menu }
+  )
+})
+
+bot.hears('Сотрудничество. Дропшиппинг⚙️', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
+  await ctx.reply(await text.getDropShipping());
+})
+
+bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
+  await ctx.reply(
+      `Аккаунт поддержки: ${await text.getSupport()}`
+  )
+})
+
+bot.hears('Реферальная система', async ctx => {
+  ctx.session.waitForAnswerFrom = false;
+  if (!(await setting.getReferrals())) {
+    return;
+  }
+  const user = await users.withId(`${ctx.from?.id}`);
+  const referralLink = referral.getReferralCode(await text.getLink(), await user.id());
+  await ctx.reply(
+    `Ваша реферальная ссылка: ${referralLink}\n` +
+    `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефералов`
+  );
+})
+
 bot.command('admin', async ctx => {
-    const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) {
-        return;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  await ctx.reply(
+    'Админ меню.',
+    {
+      reply_markup: new Keyboard()
+        .text('Глобальное сообщение').row()
+        .text('Временная скидка').row()
+        .text('Текущие скидки').row()
+        .resized()
     }
-    await ctx.reply(
-        'Админ меню.',
-        {
-            reply_markup: new Keyboard()
-                .text('Глобальное сообщение').row()
-                .text('Временная скидка').row()
-                .text('Текущие скидки').row()
-                .resized()
-        }
-    )
+  )
 })
 
 const declineMenu = new Menu<ContextWithSession>('decline')
@@ -339,34 +439,34 @@ bot.hears('Глобальное сообщение', async ctx => {
   ctx.session.waitForText = false;
   ctx.session.waitForPrice = false;
   ctx.session.waitForDuration = false;
-    const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) {
-        return;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  ctx.session.waitForText = true;
+  await ctx.reply(
+    'Введите сообщение.',
+    {
+      reply_markup: declineMenu
     }
-    ctx.session.waitForText = true;
-    await ctx.reply(
-        'Введите сообщение.',
-        {
-            reply_markup: declineMenu
-        }
-    );
+  );
 })
 
 bot.hears('Временная скидка', async ctx => {
   ctx.session.waitForText = false;
   ctx.session.waitForPrice = false;
   ctx.session.waitForDuration = false;
-    const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) {
-        return;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!await user.isAdmin()) {
+    return;
+  }
+  ctx.session.planType = 'admin';
+  await ctx.reply(
+    'Выберите тариф.',
+    {
+      reply_markup: monthMenu
     }
-    ctx.session.planType = 'admin';
-    await ctx.reply(
-        'Выберите тариф.',
-        {
-            reply_markup: monthMenu
-        }
-    );
+  );
 })
 
 bot.hears('Текущие скидки', async ctx => {
@@ -385,55 +485,6 @@ bot.hears('Текущие скидки', async ctx => {
     }
   );
 })
-
-bot.hears('Текущая подписка📝', async ctx => {
-  if (ctx.from === undefined) return
-  const user = await users.withId(`${ctx.from.id}`)
-  const subscription = await user.subscrption()
-  if (subscription === undefined || await subscription.ended() < new Date()) {
-    await ctx.reply('У вас сейчас нету подписки')
-    return
-  }
-  await ctx.reply(await subscription.asString())
-})
-
-bot.hears('Оплатить/Продлить подписку💸', async ctx => {
-  let isSetTypes = await setting.getTypes();
-  let reply_menu: Menu<ContextWithSession>;
-  if (isSetTypes) {
-    reply_menu = typeMenu;
-  } else {
-    ctx.session.planType = "all";
-    reply_menu = monthMenu;
-  }
-  await ctx.reply(
-      'Отлично! Выберете нужный вам тариф.',
-      { reply_markup: reply_menu }
-  )
-})
-
-bot.hears('Сотрудничество. Дропшиппинг⚙️', async ctx => {
-  await ctx.reply(await text.getDropShipping());
-})
-
-bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
-  await ctx.reply(
-      `Аккаунт поддержки: ${await text.getSupport()}`
-  )
-})
-
-bot.hears('Реферальная система', async ctx => {
-  if (!(await setting.getReferrals())) {
-    return;
-  }
-  const user = await users.withId(`${ctx.from?.id}`);
-  const referralLink = referral.getReferralCode(await user.id());
-  await ctx.reply(
-    `Ваша реферальная ссылка: ${referralLink}\n` +
-    `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефералов`
-  );
-})
-
 
 bot.on(['message:document', 'message:photo'], async ctx => {
   const planId = ctx.session.planId

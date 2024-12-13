@@ -29,4 +29,8 @@ export default class TextService {
   async getInstruction() {
     return await this.getField('instruction');
   }
+
+  async getLink() {
+    return await this.getField('link');
+  }
 }

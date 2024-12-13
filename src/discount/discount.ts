@@ -72,6 +72,39 @@ export default class DiscountService {
     return users;
   }
 
+  async offerRenewSubscription(notification: NotificationService) {
+    const currentDate = new Date();
+    const fourDaysAgo = new Date();
+    fourDaysAgo.setDate(currentDate.getDate() - 4);
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(currentDate.getDate() - 4);
+
+    const expiredSubscriptions = await this.prisma.subscription.findMany({
+      where: {
+        expiredAt: {
+          lte: fourDaysAgo,
+          gte: fiveDaysAgo
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    for (const subscription of expiredSubscriptions) {
+      if (
+        subscription.user.personalDiscount != 0 &&
+        subscription.user.personalDiscountExpireAt <= currentDate
+      )
+        continue;
+      await notification.privateMessage(
+        subscription.user.id,
+        'Продлите подписку со скидкой 10%! Успейте в течение 4 дней.'
+      )
+      await this.givePersonalDiscount(subscription.user.id, 10);
+    }
+  }
+
   async givePersonalDiscount(userId: string, percent: number = 10) {
     const expireAt = new Date(new Date().getTime() + 4 * 24 * 60 * 60 * 1000);
     await this.prisma.user.update({
@@ -88,7 +121,6 @@ export default class DiscountService {
       where: { id: userId },
       data: {
         personalDiscount: 0,
-        personalDiscountExpireAt: new Date()
       }
     });
   }
