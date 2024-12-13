@@ -404,7 +404,7 @@ bot.hears('Реферальная система', async ctx => {
     return;
   }
   const user = await users.withId(`${ctx.from?.id}`);
-  const referralLink = referral.getReferralCode(await user.id());
+  const referralLink = referral.getReferralCode(await text.getLink(), await user.id());
   await ctx.reply(
     `Ваша реферальная ссылка: ${referralLink}\n` +
     `У вас ${await referral.getReferralsCount(`${ctx.from?.id}`)} рефералов`
