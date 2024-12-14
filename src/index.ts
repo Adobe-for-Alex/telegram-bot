@@ -530,7 +530,6 @@ bot.use(confirmNewPrice);
 
 bot.hears(/^.+$/, async ctx => {
     const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) return;
     if (!ctx.message) return;
     if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration && !ctx.session.waitForAnswerFrom) return;
     if (ctx.session.waitForAnswerFrom) {
@@ -539,7 +538,9 @@ bot.hears(/^.+$/, async ctx => {
       ctx.session.AnswerFromCallback();
       await notification.notifyAdmins(`Пользователь ${ctx.chatId?.toString()} сказал, что узнал о нас от: ${ctx.message.text}`);
       ctx.session.waitForAnswerFrom = false;
+      return;
     }
+  if (!await user.isAdmin()) return;
     if (ctx.session.waitForText) {
       await notification.globalMessage(`${ctx.message.text}`);
       ctx.session.waitForText = false;
