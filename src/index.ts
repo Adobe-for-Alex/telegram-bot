@@ -1,5 +1,5 @@
 import { Menu, MenuRange } from "@grammyjs/menu"
-import {Bot, Context, InlineKeyboard, Keyboard, session, SessionFlavor} from "grammy"
+import {Bot, Context, InlineKeyboard, Keyboard, NextFunction, session, SessionFlavor} from "grammy"
 import { PlanId } from "./aliases"
 import { PrismaClient } from "@prisma/client"
 import PlansInPrisma from "./plans/PlansInPrisma"
@@ -52,8 +52,21 @@ bot.use((ctx, next) => {
 })
 const notification = new NotificationService(prisma, bot as unknown as Bot);
 
+const checkForSubscription = () => async (ctx : ContextWithSession, next : NextFunction) => {
+  try {
+    const chatMember = await ctx.api.getChatMember(`${await text.getGroupLink()}`, ctx.from?.id ?? 1);
+    if (chatMember.status !== 'member' && chatMember.status !== 'administrator' && chatMember.status !== 'creator') {
+      await ctx.reply(`Вы не подписаны на канал ${await text.getGroupLink()}`);
+      return;
+    }
+  }
+  catch(e) {}
+  await next();
+}
+
 const admins = new AdminsInPrisma(bot.api, prisma)
 bot.use(admins.middleware(plans, users, sessions, discount, text))
+bot.use(checkForSubscription());
 bot.use(discount.middleware());
 
 cron.schedule('*/1 * * * *', async () => {
@@ -530,7 +543,6 @@ bot.use(confirmNewPrice);
 
 bot.hears(/^.+$/, async ctx => {
     const user = await users.withId(ctx.chatId.toString());
-    if (!await user.isAdmin()) return;
     if (!ctx.message) return;
     if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration && !ctx.session.waitForAnswerFrom) return;
     if (ctx.session.waitForAnswerFrom) {
@@ -539,7 +551,9 @@ bot.hears(/^.+$/, async ctx => {
       ctx.session.AnswerFromCallback();
       await notification.notifyAdmins(`Пользователь ${ctx.chatId?.toString()} сказал, что узнал о нас от: ${ctx.message.text}`);
       ctx.session.waitForAnswerFrom = false;
+      return;
     }
+  if (!await user.isAdmin()) return;
     if (ctx.session.waitForText) {
       await notification.globalMessage(`${ctx.message.text}`);
       ctx.session.waitForText = false;

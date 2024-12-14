@@ -33,4 +33,8 @@ export default class TextService {
   async getLink() {
     return await this.getField('link');
   }
+
+  async getGroupLink() {
+    return await this.getField('groupLink');
+  }
 }
