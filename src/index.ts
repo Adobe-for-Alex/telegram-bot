@@ -53,12 +53,14 @@ bot.use((ctx, next) => {
 const notification = new NotificationService(prisma, bot as unknown as Bot);
 
 const checkForSubscription = () => async (ctx : ContextWithSession, next : NextFunction) => {
-  const chatMember = await ctx.api.getChatMember(`${await text.getGroupLink()}`, ctx.from?.id ?? 1);
-  if (chatMember.status !== 'member' && chatMember.status !== 'administrator' && chatMember.status !== 'creator') {
-    console.log(chatMember.status)
-    await ctx.reply(`Вы не подписаны на канал ${await text.getGroupLink()}`);
-    return;
+  try {
+    const chatMember = await ctx.api.getChatMember(`${await text.getGroupLink()}`, ctx.from?.id ?? 1);
+    if (chatMember.status !== 'member' && chatMember.status !== 'administrator' && chatMember.status !== 'creator') {
+      await ctx.reply(`Вы не подписаны на канал ${await text.getGroupLink()}`);
+      return;
+    }
   }
+  catch(e) {}
   await next();
 }
 
