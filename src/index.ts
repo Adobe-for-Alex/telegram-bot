@@ -127,7 +127,10 @@ const productMenu = new Menu<ContextWithSession>('product-menu')
 ${await plan.asString()}\n` +
               (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
               `Вам необходимо оплатить его и отправить нам чек
-Реквезиты для оплаты: <реквизиты>`,
+Реквизиты  для оплаты ⬇️
++79215598095
+Тинькофф
+Егор Д.`,
               { reply_markup: paymentMenu }
             )
           } else {
@@ -139,7 +142,10 @@ ${await plan.asString()}\n` +
 ${await plan.asString()}\n` +
                 (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
                 `Вам необходимо оплатить его и отправить нам чек
-Реквезиты для оплаты: <реквизиты>`,
+Реквизиты  для оплаты ⬇️
++79215598095
+Тинькофф
+Егор Д.`,
                 { reply_markup: paymentMenu }
               )
             }
@@ -227,7 +233,7 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
                   `Вы выбрали тариф: ${planString}\n` +
                   (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
                   'Вам необходимо оплатить его и отправить нам чек\n' +
-                  'Реквизиты для оплаты: <реквизиты>',
+                  'Реквизиты  для оплаты ⬇️\n+79215598095\nТинькофф\nЕгор Д.',
                   { reply_markup: paymentMenu }
                 );
               } else {
@@ -240,7 +246,7 @@ const monthMenu = new Menu<ContextWithSession>('month-menu')
                     `Вы выбрали тариф: ${planString}\n` +
                     (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
                     'Вам необходимо оплатить его и отправить нам чек\n' +
-                    'Реквизиты для оплаты: <реквизиты>',
+                    'Реквизиты  для оплаты ⬇️\n+79215598095\nТинькофф\nЕгор Д.',
                     { reply_markup: paymentMenu }
                   );
                 }
@@ -279,8 +285,8 @@ const monthMenuDropshipping = new Menu<ContextWithSession>('month-menu-dropshipp
             `Вы выбрали тариф: ${planString}\n` +
             (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
             'Вам необходимо оплатить его и отправить нам чек\n' +
-            'Реквизиты для оплаты: <реквизиты>',
-            {reply_markup: paymentMenu}
+            'Реквизиты  для оплаты ⬇️\n+79215598095\nТинькофф\nЕгор Д.',
+            { reply_markup: paymentMenu }
           );
         } else {
           await ctx.deleteMessage();
@@ -292,8 +298,8 @@ const monthMenuDropshipping = new Menu<ContextWithSession>('month-menu-dropshipp
               `Вы выбрали тариф: ${planString}\n` +
               (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом скидки в ${personalDiscount}%)\n` : '') +
               'Вам необходимо оплатить его и отправить нам чек\n' +
-              'Реквизиты для оплаты: <реквизиты>',
-              {reply_markup: paymentMenu}
+              'Реквизиты  для оплаты ⬇️\n+79215598095\nТинькофф\nЕгор Д.',
+              { reply_markup: paymentMenu }
             );
           }
         }
