@@ -127,7 +127,10 @@ const productMenu = new Menu<ContextWithSession>('product-menu')
 ${await plan.asString()}\n` +
               (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
               `Вам необходимо оплатить его и отправить нам чек
-Реквезиты для оплаты: <реквизиты>`,
+Реквизиты  для оплаты ⬇️
++79215598095
+Тинькофф
+Егор Д.`,
               { reply_markup: paymentMenu }
             )
           } else {
