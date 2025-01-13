@@ -13,6 +13,7 @@ import ReferralService from "./referral/referral";
 import cron from 'node-cron'
 import TextService from "./text/text";
 import SettingService from "./setting/setting";
+import shuffle from "knuth-shuffle-seeded"
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
@@ -76,6 +77,62 @@ cron.schedule('*/1 * * * *', async () => {
   await discount.checkForTemporaryDiscounts(notification);
   await discount.offerRenewSubscription(notification);
 });
+
+let sessionCreationProcessIsRunning = false
+cron.schedule('*/5 * * * *', async () => {
+  if (sessionCreationProcessIsRunning) {
+    console.log('Try to start new session creation process ignored because old process still running')
+    return
+  }
+  console.log('Start new session creation process')
+  try {
+    sessionCreationProcessIsRunning = true
+    const subscriptionsWithoutSessions = shuffle(await prisma.subscription.groupBy({
+      by: ['userId'],
+      where: {
+        expiredAt: { gte: new Date() },
+        AND: {
+          user: {
+            sessions: {
+              none: {
+                deleted: false
+              }
+            }
+          }
+        }
+      },
+    }))
+    console.log(`Session creation process: Found ${subscriptionsWithoutSessions.length} unsatisnied users`)
+    subscriptionsWithoutSessions
+
+    for (const { userId } of subscriptionsWithoutSessions) {
+      console.log('Create session for user', userId)
+      await sessions.forUser(userId)
+      console.log('Create session for user', userId, 'Success! Notifing...')
+      const newSession = await prisma.session.findFirstOrThrow({
+        where: {
+          userId,
+          AND: { deleted: false }
+        }
+      })
+      await fetch(new URL(`http://localhost:8080/${webhookPath}`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: newSession.id,
+          email: newSession.email,
+          password: newSession.password
+        })
+      })
+    }
+  } catch (e) {
+    console.error('Session creation process: Failed', e)
+  } finally {
+    sessionCreationProcessIsRunning = false
+  }
+})
 
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
   .text('Отменить', async ctx => {

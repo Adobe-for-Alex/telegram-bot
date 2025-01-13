@@ -51,7 +51,7 @@ export default class AdminsInPrisma implements Admins {
       }
     }
   }
-  middleware(plans: Plans, users: Users, sessions: Sessions, discounts: DiscountService, text: TextService): Middleware {
+  middleware(plans: Plans, users: Users, _: Sessions, discounts: DiscountService, text: TextService): Middleware {
     return async (ctx, next) => {
       const match = /^(approve|reject)-(.*)$/.exec(ctx.callbackQuery?.data || '')
       if (match === null) return next()
@@ -67,14 +67,8 @@ export default class AdminsInPrisma implements Admins {
         case 'approve': {
           await this.prisma.approve.create({ data: { requestId } })
           await plans.withId(request.payment.planId).then(x => x?.extendSubscrptionFor(user))
-          await sessions.forUser(await user.id())
           await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
-          await ctx.api.sendMessage(
-            userId,
-            `Ваш платеж одобрен!
-Данные вашей подписки:
-
-${await user.subscrption().then(x => x?.asString())}`)
+          await ctx.api.sendMessage(userId, 'Ваш платеж одобрен! Вы добавленны в очередь на выдачу аккаунтов, ожидайте.')
           await ctx.api.sendMessage(userId, await text.getInstruction());
           await discounts.removePersonalDiscount(request.payment.user.id);
           break;
