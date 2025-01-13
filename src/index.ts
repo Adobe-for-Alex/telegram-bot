@@ -1,5 +1,5 @@
 import { Menu, MenuRange } from "@grammyjs/menu"
-import {Bot, Context, InlineKeyboard, Keyboard, NextFunction, session, SessionFlavor} from "grammy"
+import { Bot, Context, InlineKeyboard, Keyboard, NextFunction, session, SessionFlavor } from "grammy"
 import { PlanId } from "./aliases"
 import { PrismaClient } from "@prisma/client"
 import PlansInPrisma from "./plans/PlansInPrisma"
@@ -13,6 +13,7 @@ import ReferralService from "./referral/referral";
 import cron from 'node-cron'
 import TextService from "./text/text";
 import SettingService from "./setting/setting";
+import shuffle from "knuth-shuffle-seeded"
 
 const token = process.env['TELEGRAM_BOT_TOKEN']
 if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
@@ -52,7 +53,7 @@ bot.use((ctx, next) => {
 })
 const notification = new NotificationService(prisma, bot as unknown as Bot);
 
-const checkForSubscription = () => async (ctx : ContextWithSession, next : NextFunction) => {
+const checkForSubscription = () => async (ctx: ContextWithSession, next: NextFunction) => {
   try {
     const chatMember = await ctx.api.getChatMember(`${await text.getGroupLink()}`, ctx.from?.id ?? 1);
     if (chatMember.status !== 'member' && chatMember.status !== 'administrator' && chatMember.status !== 'creator') {
@@ -60,7 +61,7 @@ const checkForSubscription = () => async (ctx : ContextWithSession, next : NextF
       return;
     }
   }
-  catch(e) {}
+  catch (e) { }
   await next();
 }
 
@@ -77,17 +78,73 @@ cron.schedule('*/1 * * * *', async () => {
   await discount.offerRenewSubscription(notification);
 });
 
+let sessionCreationProcessIsRunning = false
+cron.schedule('*/5 * * * *', async () => {
+  if (sessionCreationProcessIsRunning) {
+    console.log('Try to start new session creation process ignored because old process still running')
+    return
+  }
+  console.log('Start new session creation process')
+  try {
+    sessionCreationProcessIsRunning = true
+    const subscriptionsWithoutSessions = shuffle(await prisma.subscription.groupBy({
+      by: ['userId'],
+      where: {
+        expiredAt: { gte: new Date() },
+        AND: {
+          user: {
+            sessions: {
+              none: {
+                deleted: false
+              }
+            }
+          }
+        }
+      },
+    }))
+    console.log(`Session creation process: Found ${subscriptionsWithoutSessions.length} unsatisnied users`)
+    subscriptionsWithoutSessions
+
+    for (const { userId } of subscriptionsWithoutSessions) {
+      console.log('Create session for user', userId)
+      await sessions.forUser(userId)
+      console.log('Create session for user', userId, 'Success! Notifing...')
+      const newSession = await prisma.session.findFirstOrThrow({
+        where: {
+          userId,
+          AND: { deleted: false }
+        }
+      })
+      await fetch(new URL(`http://localhost:8080/${webhookPath}`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: newSession.id,
+          email: newSession.email,
+          password: newSession.password
+        })
+      })
+    }
+  } catch (e) {
+    console.error('Session creation process: Failed', e)
+  } finally {
+    sessionCreationProcessIsRunning = false
+  }
+})
+
 const paymentMenu = new Menu<ContextWithSession>('payment-menu')
-    .text('Отменить', async ctx => {
-      await ctx.editMessageReplyMarkup( { reply_markup: new InlineKeyboard() });
-      if (ctx.session.planId === undefined) return;
-      delete ctx.session.planId;
-      await ctx.deleteMessage();
-      await ctx.reply('Оплата отменена')
-    }).row()
-    .back('Назад', async ctx => {
-      await ctx.editMessageText('Отлично! Выберите нужный вам тариф.')
-    })
+  .text('Отменить', async ctx => {
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() });
+    if (ctx.session.planId === undefined) return;
+    delete ctx.session.planId;
+    await ctx.deleteMessage();
+    await ctx.reply('Оплата отменена')
+  }).row()
+  .back('Назад', async ctx => {
+    await ctx.editMessageText('Отлично! Выберите нужный вам тариф.')
+  })
 
 const products = [
   'Photoshop',
@@ -108,20 +165,35 @@ const products = [
 ]
 
 const productMenu = new Menu<ContextWithSession>('product-menu')
-    .dynamic(async () => {
-      const range = new MenuRange<ContextWithSession>()
-      for (const product of products) {
-        range.text(product, async ctx => {
-          ctx.session.product = product;
-          if (!ctx.session.planId) return;
-          const plan = await plans.withId(ctx.session.planId);
-          if (!plan) return;
-          const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
-          const price = await plan.getPrice();
-          const userPrice = price - (personalDiscount) * price / 100;
-          await ctx.deleteMessage();
-          const isSetAskFrom = await setting.getAskFrom();
-          if (!isSetAskFrom) {
+  .dynamic(async () => {
+    const range = new MenuRange<ContextWithSession>()
+    for (const product of products) {
+      range.text(product, async ctx => {
+        ctx.session.product = product;
+        if (!ctx.session.planId) return;
+        const plan = await plans.withId(ctx.session.planId);
+        if (!plan) return;
+        const personalDiscount = await discount.getPersonalDiscount(`${ctx.from?.id}`);
+        const price = await plan.getPrice();
+        const userPrice = price - (personalDiscount) * price / 100;
+        await ctx.deleteMessage();
+        const isSetAskFrom = await setting.getAskFrom();
+        if (!isSetAskFrom) {
+          await ctx.reply(
+            `Вы выбрали продукт: ${product}
+${await plan.asString()}\n` +
+            (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
+            `Вам необходимо оплатить его и отправить нам чек
+Реквизиты  для оплаты ⬇️
++79215598095
+Тинькофф
+Егор Д.`,
+            { reply_markup: paymentMenu }
+          )
+        } else {
+          await ctx.reply('Откуда вы о нас узнали?');
+          ctx.session.waitForAnswerFrom = true;
+          ctx.session.AnswerFromCallback = async () => {
             await ctx.reply(
               `Вы выбрали продукт: ${product}
 ${await plan.asString()}\n` +
@@ -133,28 +205,13 @@ ${await plan.asString()}\n` +
 Егор Д.`,
               { reply_markup: paymentMenu }
             )
-          } else {
-            await ctx.reply('Откуда вы о нас узнали?');
-            ctx.session.waitForAnswerFrom = true;
-            ctx.session.AnswerFromCallback = async () => {
-              await ctx.reply(
-                `Вы выбрали продукт: ${product}
-${await plan.asString()}\n` +
-                (personalDiscount !== 0 ? `Ваша цена ${userPrice} рублей (с учётом персональной скидки в ${personalDiscount}%)\n` : '') +
-                `Вам необходимо оплатить его и отправить нам чек
-Реквизиты  для оплаты ⬇️
-+79215598095
-Тинькофф
-Егор Д.`,
-                { reply_markup: paymentMenu }
-              )
-            }
           }
-        }).row()
-      }
-      return range;
-    })
-    .back('Назад')
+        }
+      }).row()
+    }
+    return range;
+  })
+  .back('Назад')
 
 const deleteDiscountMenu = new Menu<ContextWithSession>('delete-discount-menu')
   .text('Подтвердить', async ctx => {
@@ -316,31 +373,31 @@ monthMenu.register(productMenu);
 monthMenuDropshipping.register(paymentMenu);
 
 const typeMenu = new Menu<ContextWithSession>('type-menu')
-    .text('Adobe CC все приложения + ИИ', async ctx => {
-      await ctx.deleteMessage();
-      ctx.session.planType = 'all';
-      await ctx.reply(
-          'Выберите период',
-          { reply_markup: monthMenu }
-      )
-    }).row()
-    .text('Adobe CC одно приложение', async ctx => {
-      await ctx.deleteMessage();
-      ctx.session.planType = 'one';
-      await ctx.reply(
-          'Adobe Creative Cloud  одно приложение:\n' +
-          '- Любая программа из всех на ваш выбор\n' +
-          '- 1000 генеративных кредитов (в случае выбора приложений с Firefly)\n' +
-          '- 2 ТБ облака\n' +
-          '- Для 2-х устройств\n' +
-          '- Поддержка Windows, Mac, iOS, iPadOS, Android\n' +
-          '- Никаких ограничений\n' +
-          '- Постоянные обновления \n',
-          { reply_markup: monthMenu }
-      )
-    }).row()
+  .text('Adobe CC все приложения + ИИ', async ctx => {
+    await ctx.deleteMessage();
+    ctx.session.planType = 'all';
+    await ctx.reply(
+      'Выберите период',
+      { reply_markup: monthMenu }
+    )
+  }).row()
+  .text('Adobe CC одно приложение', async ctx => {
+    await ctx.deleteMessage();
+    ctx.session.planType = 'one';
+    await ctx.reply(
+      'Adobe Creative Cloud  одно приложение:\n' +
+      '- Любая программа из всех на ваш выбор\n' +
+      '- 1000 генеративных кредитов (в случае выбора приложений с Firefly)\n' +
+      '- 2 ТБ облака\n' +
+      '- Для 2-х устройств\n' +
+      '- Поддержка Windows, Mac, iOS, iPadOS, Android\n' +
+      '- Никаких ограничений\n' +
+      '- Постоянные обновления \n',
+      { reply_markup: monthMenu }
+    )
+  }).row()
   .text('Купить через менеджера', async ctx => {
-    await ctx.editMessageReplyMarkup({reply_markup: new InlineKeyboard() });
+    await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() });
     await ctx.reply(`Аккаунт менеджера ${await text.getSupport()}`);
   })
 typeMenu.register(monthMenu);
@@ -360,7 +417,7 @@ setting.getReferrals().then((isSet) => {
 
 bot.command('start', async ctx => {
   const referralCode = ctx.message?.text.split(' ')[1];
-  if (await setting.getSetting('referrals') ) {
+  if (await setting.getSetting('referrals')) {
     if (referralCode) {
       if (await referral.createReferral(referralCode, ctx.from?.id.toString() ?? '1')) {
         await discount.givePersonalDiscount(referralCode, 25);
@@ -370,10 +427,10 @@ bot.command('start', async ctx => {
   }
 
   await ctx.reply(
-      'Привет! Добро пожаловать в наш сервис.',
-      {
-        reply_markup: start_menu
-      }
+    'Привет! Добро пожаловать в наш сервис.',
+    {
+      reply_markup: start_menu
+    }
   )
 })
 
@@ -400,8 +457,8 @@ bot.hears('Оплатить/Продлить подписку💸', async ctx =>
     reply_menu = monthMenuDropshipping;
   }
   await ctx.reply(
-      'Отлично! Выберите нужный вам тариф.',
-      { reply_markup: reply_menu }
+    'Отлично! Выберите нужный вам тариф.',
+    { reply_markup: reply_menu }
   )
 })
 
@@ -413,7 +470,7 @@ bot.hears('Сотрудничество. Дропшиппинг⚙️', async ct
 bot.hears('Онлайн поддержка👨🏽‍💻', async ctx => {
   ctx.session.waitForAnswerFrom = false;
   await ctx.reply(
-      `Аккаунт поддержки: ${await text.getSupport()}`
+    `Аккаунт поддержки: ${await text.getSupport()}`
   )
 })
 
@@ -548,44 +605,44 @@ const confirmNewPrice = new Menu<ContextWithSession>('new-price')
 bot.use(confirmNewPrice);
 
 bot.hears(/^.+$/, async ctx => {
-    const user = await users.withId(ctx.chatId.toString());
-    if (!ctx.message) return;
-    if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration && !ctx.session.waitForAnswerFrom) return;
-    if (ctx.session.waitForAnswerFrom) {
-      if (!ctx.session.AnswerFromCallback)
-        return;
-      ctx.session.AnswerFromCallback();
-      await notification.notifyAdmins(`Пользователь ${ctx.chatId?.toString()} сказал, что узнал о нас от: ${ctx.message.text}`);
-      ctx.session.waitForAnswerFrom = false;
+  const user = await users.withId(ctx.chatId.toString());
+  if (!ctx.message) return;
+  if (!ctx.session.waitForText && !ctx.session.waitForPrice && !ctx.session.waitForDuration && !ctx.session.waitForAnswerFrom) return;
+  if (ctx.session.waitForAnswerFrom) {
+    if (!ctx.session.AnswerFromCallback)
       return;
-    }
+    ctx.session.AnswerFromCallback();
+    await notification.notifyAdmins(`Пользователь ${ctx.chatId?.toString()} сказал, что узнал о нас от: ${ctx.message.text}`);
+    ctx.session.waitForAnswerFrom = false;
+    return;
+  }
   if (!await user.isAdmin()) return;
-    if (ctx.session.waitForText) {
-      await notification.globalMessage(`${ctx.message.text}`);
-      ctx.session.waitForText = false;
-    }
-    else if (ctx.session.waitForPrice) {
-      const price = ctx.message.text ?? '1';
-      ctx.session.price = parseInt(price);
-      if (isNaN(ctx.session.price)) return;
-      await ctx.reply('Введите длительность (дней)');
-      ctx.session.waitForDuration = true;
-      ctx.session.waitForPrice = false;
-    }
-    else if (ctx.session.waitForDuration) {
-      const duration = ctx.message.text ?? '1';
-      ctx.session.duration = parseInt(duration);
-      if (isNaN(ctx.session.duration)) return;
-      await ctx.reply(
-        'Вы действительно хотите изменить тариф\n' +
-        `${(await (await plans.withId(ctx.session.planId ?? 1))?.asString())}\n` +
-        `Новая цена: ${ctx.session.price} рублей\n` +
-        `Новая длительность: ${ctx.session.duration} дней`,
-        {
-          reply_markup: confirmNewPrice,
-        });
-      ctx.session.waitForDuration = false;
-    }
+  if (ctx.session.waitForText) {
+    await notification.globalMessage(`${ctx.message.text}`);
+    ctx.session.waitForText = false;
+  }
+  else if (ctx.session.waitForPrice) {
+    const price = ctx.message.text ?? '1';
+    ctx.session.price = parseInt(price);
+    if (isNaN(ctx.session.price)) return;
+    await ctx.reply('Введите длительность (дней)');
+    ctx.session.waitForDuration = true;
+    ctx.session.waitForPrice = false;
+  }
+  else if (ctx.session.waitForDuration) {
+    const duration = ctx.message.text ?? '1';
+    ctx.session.duration = parseInt(duration);
+    if (isNaN(ctx.session.duration)) return;
+    await ctx.reply(
+      'Вы действительно хотите изменить тариф\n' +
+      `${(await (await plans.withId(ctx.session.planId ?? 1))?.asString())}\n` +
+      `Новая цена: ${ctx.session.price} рублей\n` +
+      `Новая длительность: ${ctx.session.duration} дней`,
+      {
+        reply_markup: confirmNewPrice,
+      });
+    ctx.session.waitForDuration = false;
+  }
 });
 
 bot.catch(details => console.error(`User ${details.ctx.from?.id} Chat ${details.ctx.chat?.id}`, details.error))
