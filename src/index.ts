@@ -21,6 +21,8 @@ const subscriptionServiceBaseUrl = process.env['SUBSCRIPTION_SERVICE_BASE_URL']
 if (!subscriptionServiceBaseUrl) throw new Error('SUBSCRIPTION_SERVICE_BASE_URL is undefined')
 const webhookPath = process.env['SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH']
 if (!webhookPath) throw new Error('SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH is undefined')
+const freePlacesNotificationWebhook = process.env['FREE_PLACES_NOTIFICATIONS_PATH']
+const freePlacesCriticalShare = +(process.env['FREE_PLACES_CRITICAL_SHARE'] || '') || 0.5
 
 const prisma = new PrismaClient()
 const plans = new PlansInPrisma(prisma)
@@ -653,6 +655,7 @@ webhook.use((req, _, next) => {
   console.log(req.method, req.path, 'Query:', req.query, 'Body:', req.body)
   return next()
 })
+
 webhook.post(webhookPath, async (req, res, next) => {
   try {
     const { id, email, password } = req.body
@@ -670,4 +673,30 @@ ${await user.subscrption().then(x => x?.asString())}`
     return next(e)
   }
 })
+
+if (!freePlacesNotificationWebhook) {
+  console.log('Free places notification disabled because FREE_PLACES_NOTIFICATIONS_PATH is undefined')
+} else {
+  webhook.post(freePlacesNotificationWebhook, async (req, res, next) => {
+    try {
+      const { free, total } = req.body
+      if (free / total > freePlacesCriticalShare) {
+        res.send('Skipped')
+        return
+      }
+      const admins = (await prisma.admin.findMany({ select: { userId: true } }))
+        .map(x => x.userId)
+      for (const admin of admins) {
+        await bot.api.sendMessage(admin, `
+Осталось мало свободных мест для пользователей!
+Свободно: ${free}/${total} (${free / total * 100}%)
+`)
+      }
+      res.send('Notified')
+    } catch (e) {
+      return next(e)
+    }
+  })
+}
+
 webhook.listen(8080, () => console.log('Server started'))
