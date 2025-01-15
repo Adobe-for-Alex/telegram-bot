@@ -14,15 +14,16 @@ import cron from 'node-cron'
 import TextService from "./text/text";
 import SettingService from "./setting/setting";
 import shuffle from "knuth-shuffle-seeded"
+import { loadConfig } from "./config"
+import { inspect } from "util"
 
-const token = process.env['TELEGRAM_BOT_TOKEN']
-if (!token) throw new Error('TELEGRAM_BOT_TOKEN is undefined')
-const subscriptionServiceBaseUrl = process.env['SUBSCRIPTION_SERVICE_BASE_URL']
-if (!subscriptionServiceBaseUrl) throw new Error('SUBSCRIPTION_SERVICE_BASE_URL is undefined')
-const webhookPath = process.env['SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH']
-if (!webhookPath) throw new Error('SUBSCRIPTION_SERVICE_WEBHOOK_UPDATE_PATH is undefined')
-const freePlacesNotificationWebhook = process.env['FREE_PLACES_NOTIFICATIONS_PATH']
-const freePlacesCriticalShare = +(process.env['FREE_PLACES_CRITICAL_SHARE'] || '') || 0.5
+
+const config = loadConfig()
+console.log('Config', inspect(config, {
+  depth: 42,
+  colors: true,
+  numericSeparator: true
+}))
 
 const prisma = new PrismaClient()
 const plans = new PlansInPrisma(prisma)
@@ -31,7 +32,7 @@ const discount = new DiscountService(prisma);
 const referral = new ReferralService(prisma);
 const text = new TextService(prisma);
 const setting = new SettingService(prisma);
-const sessions = new SubscriptionService(new URL(subscriptionServiceBaseUrl), prisma)
+const sessions = new SubscriptionService(config.subscriptionService.base, prisma)
 
 interface Session {
   planId?: PlanId,
@@ -47,7 +48,7 @@ interface Session {
 }
 type ContextWithSession = Context & SessionFlavor<Session>
 
-const bot = new Bot<ContextWithSession>(token)
+const bot = new Bot<ContextWithSession>(config.token)
 bot.use(session({ initial: () => ({}) }))
 bot.use((ctx, next) => {
   console.log(`User ${ctx.from?.id} Chat ${ctx.chat?.id} Message ${ctx.message?.message_id} Callback ${ctx.update.callback_query?.data}`)
@@ -117,7 +118,7 @@ cron.schedule('*/5 * * * *', async () => {
           AND: { deleted: false }
         }
       })
-      await fetch(new URL(`http://localhost:8080/${webhookPath}`), {
+      await fetch(new URL(`http://localhost:8080/${config.subscriptionService.webhook}`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -656,7 +657,7 @@ webhook.use((req, _, next) => {
   return next()
 })
 
-webhook.post(webhookPath, async (req, res, next) => {
+webhook.post(config.subscriptionService.webhook, async (req, res, next) => {
   try {
     const { id, email, password } = req.body
     await sessions.update(id, email, password)
@@ -674,13 +675,14 @@ ${await user.subscrption().then(x => x?.asString())}`
   }
 })
 
-if (!freePlacesNotificationWebhook) {
-  console.log('Free places notification disabled because FREE_PLACES_NOTIFICATIONS_PATH is undefined')
+if (!config.freePlacesNotifications) {
+  console.log('Free places notification disabled because config.freePlacesNotifications is undefined')
 } else {
-  webhook.post(freePlacesNotificationWebhook, async (req, res, next) => {
+  const freePlacesNotifications = config.freePlacesNotifications
+  webhook.post(freePlacesNotifications.webhook, async (req, res, next) => {
     try {
       const { free, total } = req.body
-      if (free / total > freePlacesCriticalShare) {
+      if (free / total > freePlacesNotifications.criticalShare) {
         res.send('Skipped')
         return
       }
