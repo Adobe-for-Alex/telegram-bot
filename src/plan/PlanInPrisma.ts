@@ -35,7 +35,8 @@ export default class PlanInPrisma implements Plan {
       where: {
         request: { payment: { userId: await user.id() } },
         AND: { request: { payment: { planId: this._id } } }
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     })
     if (!approve) throw new Error(`Approve for user ${await user.id()} and plan ${this._id} not found`)
     const startDate = await user.subscrption().then(x => x?.ended()) || new Date()
