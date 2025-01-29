@@ -118,7 +118,7 @@ cron.schedule('*/5 * * * *', async () => {
           AND: { deleted: false }
         }
       })
-      await fetch(new URL(`http://localhost:8080/${config.subscriptionService.webhook}`), {
+      await fetch(new URL(config.subscriptionService.webhook, 'http://localhost:8080'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
