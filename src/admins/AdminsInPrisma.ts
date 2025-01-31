@@ -68,7 +68,7 @@ export default class AdminsInPrisma implements Admins {
           await this.prisma.approve.create({ data: { requestId } })
           await plans.withId(request.payment.planId).then(x => x?.extendSubscrptionFor(user))
           await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard() })
-          await ctx.api.sendMessage(userId, 'Ваш платеж одобрен! Вы добавленны в очередь на выдачу аккаунтов, ожидайте.')
+          await ctx.api.sendMessage(userId, 'Ваш платеж одобрен! Вы добавленны в очередь на выдачу аккаунтов. Среднее время выдачи - 5 минут')
           await ctx.api.sendMessage(userId, await text.getInstruction());
           await discounts.removePersonalDiscount(request.payment.user.id);
           break;
