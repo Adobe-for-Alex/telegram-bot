@@ -7,17 +7,18 @@ FROM base AS develop
 CMD pnpm start:develop
 
 FROM base AS builder
-COPY node_modules node_modules
-COPY package.json pnpm-lock.yaml tsconfig.json ./
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --ignore-scripts
 COPY prisma prisma
-COPY src src
 RUN pnpx prisma generate
+COPY tsconfig.json ./
+COPY src src
 RUN pnpm build
 
 FROM base AS production
-COPY package.json pnpm-lock.yaml tsconfig.json ./
-COPY prisma prisma
-COPY --from=builder /app/dist dist
+COPY package.json pnpm-lock.yaml  ./
 RUN pnpm install --production --ignore-scripts
+COPY prisma prisma
 RUN pnpx prisma generate
+COPY --from=builder /app/dist dist
 CMD pnpm prisma:deploy && pnpm start:production
