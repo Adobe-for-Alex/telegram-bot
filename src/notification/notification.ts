@@ -44,14 +44,7 @@ export default class NotificationService {
             },
         });
 
-        const latestExpiringSubscriptions = expiringSubscriptions.reduce((acc: any, subscription) => {
-            if (!acc[subscription.userId] || acc[subscription.userId].expiredAt < subscription.expiredAt) {
-                acc[subscription.userId] = subscription;
-            }
-            return acc;
-        }, {});
-
-        for (const subscription of latestExpiringSubscriptions) {
+        for (const subscription of expiringSubscriptions) {
             await this.bot.api.sendMessage(
               subscription.user.id,
               'Ваша подписка истекает через 5 дней. Вы можете продлить её прямо сейчас, чтобы не потерять доступ к продуктам Adobe\n'
