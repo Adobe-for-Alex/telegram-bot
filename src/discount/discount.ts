@@ -49,13 +49,15 @@ export default class DiscountService {
 
   async checkForPersonalDiscounts(notification: NotificationService) {
     const eightHoursAgo = new Date(new Date().getTime() - 8 * 60 * 60 * 1000);
+    const sevenHoursAgo  = new Date(new Date().getTime() - 7 * 60 * 60 * 1000);
     const currentDate = new Date();
 
     const users = await this.prisma.user.findMany(
       {
         where: {
           lastAction: {
-            lt: eightHoursAgo
+            lt: eightHoursAgo,
+            gt: sevenHoursAgo
           },
           personalDiscountExpireAt: { lt: currentDate }
         }
