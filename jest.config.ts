@@ -5,7 +5,6 @@ const config: Config = {
   testEnvironment: 'node',
   transform: {
     '^.+.ts$': ['ts-jest', {}],
-  },
-  setupFiles: ["dotenv/config"],
+  }
 }
 export default config

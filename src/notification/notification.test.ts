@@ -2,11 +2,10 @@ import createPrismaMock from 'prisma-mock';
 import { PrismaClient } from '@prisma/client';
 import { Bot } from "grammy";
 import NotificationService from "./notification";
-import {loadConfig} from "../config";
+import { jest } from '@jest/globals';
 
 const now = Date.now(); //Текущий день
-const config = loadConfig();
-const userId = ''; //Вставить свой userId
+const userId = '1';
 
 const userWithSubscriptionsPrisma = createPrismaMock<PrismaClient>({
     user: [{
@@ -72,8 +71,12 @@ const userWithoutSubscriptionsPrisma = createPrismaMock<PrismaClient>({
 
 describe('User Subscriptions', () => {
     it('should return the latest subscription for each user', async () => {
-
-        const bot = new Bot(config.token);
+        const botMock = {
+            api: {
+                sendMessage: jest.fn()
+            }
+        };
+        const bot = botMock as unknown as Bot;
 
         const notification = new NotificationService(userWithSubscriptionsPrisma, bot);
 
@@ -102,10 +105,18 @@ describe('User Subscriptions', () => {
         expect(subscriptions[0]?.expiredAt).toEqual(new Date(now + 24 * 60 * 60 * 1000 * 2)); // Должен вернуть последнюю из подписок
         expect(subscriptions[0]?.expireSoonSent).toEqual(true); // Должен вернуть последнюю из подписок
         expect(subscriptions[0]?.expireSent).toEqual(false); // Должен вернуть последнюю из подписок
-    }, 10000);
-    it('should set notified only for last subscription', async () => {
 
-        const bot = new Bot(config.token);
+        // Проверка, что методы Telegram Bot вызывались
+        expect(botMock.api.sendMessage).toHaveBeenCalled();
+    }, 10000);
+
+    it('should set notified only for last subscription', async () => {
+        const botMock = {
+            api: {
+                sendMessage: jest.fn()
+            }
+        };
+        const bot = botMock as unknown as Bot;
 
         const notification = new NotificationService(userWithSubscriptionsPrisma, bot);
 
@@ -120,7 +131,7 @@ describe('User Subscriptions', () => {
 
         for (const subscription of allSubscriptions) {
             if (allSubscriptions.indexOf(subscription) === allSubscriptions.length - 1) {
-                //Если последняя
+                // Если последняя подписка
                 expect(subscription.expireSoonSent).toEqual(true);
                 expect(subscription.expireSent).toEqual(false);
             } else {
@@ -128,8 +139,8 @@ describe('User Subscriptions', () => {
                 expect(subscription.expireSent).toEqual(false);
             }
         }
-
     }, 10000);
+
     it('should return undefined', async () => {
         const users = await userWithoutSubscriptionsPrisma.user.findMany({
             include: {
