@@ -2,7 +2,6 @@ import createPrismaMock from 'prisma-mock';
 import { PrismaClient } from '@prisma/client';
 import { Bot } from "grammy";
 import NotificationService from "./notification";
-import { jest } from '@jest/globals';
 
 const now = Date.now(); //Текущий день
 const userId = '1';
