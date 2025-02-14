@@ -3,7 +3,15 @@ import { PrismaClient } from '@prisma/client';
 import { Bot } from "grammy";
 import NotificationService from "./notification";
 
-const now = Date.now(); //Текущий день
+/**
+ * Константы, описывающие дни, используемые в качестве даты окончания подписки
+ */
+const now = Date.now();
+const twoDaysAgo = new Date(now - 24 * 60 * 60 * 1000 * 2)
+const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
+const oneDaysLater = new Date(now + 24 * 60 * 60 * 1000);
+const twoDaysLater = new Date(now + 24 * 60 * 60 * 1000 * 2);
+
 const userId = '1';
 
 const userWithSubscriptionsPrisma = createPrismaMock<PrismaClient>({
@@ -17,7 +25,7 @@ const userWithSubscriptionsPrisma = createPrismaMock<PrismaClient>({
     subscription: [
         {
             userId: userId,
-            expiredAt: new Date(now - 24 * 60 * 60 * 1000 * 2), // Позавчера
+            expiredAt: twoDaysAgo,
             createdAt: new Date(),
             approveId: 1,
             expireSent: false,
@@ -25,7 +33,7 @@ const userWithSubscriptionsPrisma = createPrismaMock<PrismaClient>({
         },
         {
             userId: userId,
-            expiredAt: new Date(now - 24 * 60 * 60 * 1000), // Вчера
+            expiredAt: oneDayAgo,
             createdAt: new Date(),
             approveId: 2,
             expireSent: false,
@@ -33,7 +41,7 @@ const userWithSubscriptionsPrisma = createPrismaMock<PrismaClient>({
         },
         {
             userId: userId,
-            expiredAt: new Date(now), // Сегодня
+            expiredAt: new Date(now),
             createdAt: new Date(),
             approveId: 3,
             expireSent: false,
@@ -41,7 +49,7 @@ const userWithSubscriptionsPrisma = createPrismaMock<PrismaClient>({
         },
         {
             userId: userId,
-            expiredAt: new Date(now + 24 * 60 * 60 * 1000), // Завтра
+            expiredAt: oneDaysLater,
             createdAt: new Date(),
             approveId: 4,
             expireSent: false,
@@ -49,7 +57,7 @@ const userWithSubscriptionsPrisma = createPrismaMock<PrismaClient>({
         },
         {
             userId: userId,
-            expiredAt: new Date(now + 24 * 60 * 60 * 1000 * 2), // Послезавтра
+            expiredAt: twoDaysLater,
             createdAt: new Date(),
             approveId: 5,
             expireSent: false,
