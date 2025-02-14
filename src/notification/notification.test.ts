@@ -25,7 +25,7 @@ const oneDayLater = new Date(now + 24 * 60 * 60 * 1000);
 const twoDaysLater = new Date(now + 24 * 60 * 60 * 1000 * 2);
 const tenDaysLater = new Date(now + 24 * 60 * 60 * 1000 * 10);
 
-const generateSubscription = (userId: string, date: Date) => {
+const createSubscription = (userId: string, date: Date) => {
     return {
         userId: userId,
         expiredAt: date,
@@ -36,7 +36,7 @@ const generateSubscription = (userId: string, date: Date) => {
     }
 }
 
-const generateUser = (userId: string) => {
+const createUser = (userId: string) => {
     return {
         id: userId,
         createdAt: new Date(),
@@ -52,13 +52,13 @@ describe('notification', () => {
     it('should send expire soon notification', async () => {
         const bot = new botMock();
         const prisma = createPrismaMock<PrismaClient>({
-            user: [generateUser(userId)],
+            user: [createUser(userId)],
             subscription: [
-                generateSubscription(userId, twoDaysAgo),
-                generateSubscription(userId, oneDayAgo),
-                generateSubscription(userId, today),
-                generateSubscription(userId, oneDayLater),
-                generateSubscription(userId, twoDaysLater),
+                createSubscription(userId, twoDaysAgo),
+                createSubscription(userId, oneDayAgo),
+                createSubscription(userId, today),
+                createSubscription(userId, oneDayLater),
+                createSubscription(userId, twoDaysLater),
             ]
         })
 
@@ -72,10 +72,10 @@ describe('notification', () => {
     it('should send expired notification', async () => {
         const bot = new botMock();
         const prisma = createPrismaMock<PrismaClient>({
-            user: [generateUser(userId)],
+            user: [createUser(userId)],
             subscription: [
-                generateSubscription(userId, twoDaysAgo),
-                generateSubscription(userId, oneDayAgo),
+                createSubscription(userId, twoDaysAgo),
+                createSubscription(userId, oneDayAgo),
             ]
         })
 
@@ -89,14 +89,14 @@ describe('notification', () => {
     it('should not send expire soon notification', async () => {
         const bot = new botMock();
         const prisma = createPrismaMock<PrismaClient>({
-            user: [generateUser(userId)],
+            user: [createUser(userId)],
             subscription: [
-                generateSubscription(userId, twoDaysAgo),
-                generateSubscription(userId, oneDayAgo),
-                generateSubscription(userId, today),
-                generateSubscription(userId, oneDayLater),
-                generateSubscription(userId, twoDaysLater),
-                generateSubscription(userId, tenDaysLater),
+                createSubscription(userId, twoDaysAgo),
+                createSubscription(userId, oneDayAgo),
+                createSubscription(userId, today),
+                createSubscription(userId, oneDayLater),
+                createSubscription(userId, twoDaysLater),
+                createSubscription(userId, tenDaysLater),
             ]
         })
 
@@ -110,11 +110,11 @@ describe('notification', () => {
     it('should not send expired notification', async () => {
         const bot = new botMock();
         const prisma = createPrismaMock<PrismaClient>({
-            user: [generateUser(userId)],
+            user: [createUser(userId)],
             subscription: [
-                generateSubscription(userId, twoDaysAgo),
-                generateSubscription(userId, oneDayAgo),
-                generateSubscription(userId, oneDayLater),
+                createSubscription(userId, twoDaysAgo),
+                createSubscription(userId, oneDayAgo),
+                createSubscription(userId, oneDayLater),
             ]
         })
 
@@ -128,13 +128,13 @@ describe('notification', () => {
     it('should send only 1 expire soon notification', async () => {
         const bot = new botMock();
         const prisma = createPrismaMock<PrismaClient>({
-            user: [generateUser(userId)],
+            user: [createUser(userId)],
             subscription: [
-                generateSubscription(userId, twoDaysAgo),
-                generateSubscription(userId, oneDayAgo),
-                generateSubscription(userId, today),
-                generateSubscription(userId, oneDayLater),
-                generateSubscription(userId, twoDaysLater),
+                createSubscription(userId, twoDaysAgo),
+                createSubscription(userId, oneDayAgo),
+                createSubscription(userId, today),
+                createSubscription(userId, oneDayLater),
+                createSubscription(userId, twoDaysLater),
             ]
         })
 
@@ -150,10 +150,10 @@ describe('notification', () => {
     it('should send only 1 expired notification', async () => {
         const bot = new botMock();
         const prisma = createPrismaMock<PrismaClient>({
-            user: [generateUser(userId)],
+            user: [createUser(userId)],
             subscription: [
-                generateSubscription(userId, twoDaysAgo),
-                generateSubscription(userId, oneDayAgo),
+                createSubscription(userId, twoDaysAgo),
+                createSubscription(userId, oneDayAgo),
             ]
         })
 
