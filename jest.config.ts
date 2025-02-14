@@ -6,5 +6,6 @@ const config: Config = {
   transform: {
     '^.+.ts$': ['ts-jest', {}],
   },
+  setupFiles: ["dotenv/config"],
 }
 export default config
