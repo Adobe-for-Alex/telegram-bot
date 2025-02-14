@@ -31,7 +31,7 @@ export default class NotificationService {
         const fiveDaysLater = new Date();
         fiveDaysLater.setDate(currentDate.getDate() + 5);
 
-        const subscriptions = await this.getUsersWithActualSubscription();
+        const subscriptions = await this.allActualSubscriptions();
 
         for (const subscription of subscriptions) {
             if (subscription.expiredAt >= fiveDaysLater || subscription.expiredAt <= currentDate || subscription.expireSoonSent) continue;
@@ -49,7 +49,7 @@ export default class NotificationService {
     async notifyExpired(): Promise<void> {
         const currentDate = new Date();
 
-        const subscriptions = await this.getUsersWithActualSubscription();
+        const subscriptions = await this.allActualSubscriptions();
 
         for (const subscription of subscriptions) {
             if (subscription.expiredAt > currentDate || subscription.expireSent) continue;
@@ -64,7 +64,7 @@ export default class NotificationService {
         }
     }
 
-    private async getUsersWithActualSubscription() {
+    private async allActualSubscriptions() {
         const users = await this.prisma.user.findMany({
             include: {
                 subscriptions: {
