@@ -74,7 +74,6 @@ export default class NotificationService {
         const subscriptions = users.map((user) => user.subscriptions[0]);
 
         for (const subscription of subscriptions) {
-            console.log(subscription);
             if (!subscription || subscription.expiredAt > currentDate || subscription.expireSent) continue;
             await this.bot.api.sendMessage(
                 subscription.userId,
