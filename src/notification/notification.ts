@@ -42,7 +42,7 @@ export default class NotificationService {
             }
         });
 
-        const subscriptions = users.map((user: { subscriptions: any[]; }) => user.subscriptions[0]);
+        const subscriptions = users.map((user) => user.subscriptions[0]);
 
         for (const subscription of subscriptions) {
             if (!subscription || subscription.expiredAt >= fiveDaysLater || subscription.expiredAt <= currentDate || subscription.expireSoonSent) continue;
@@ -71,7 +71,7 @@ export default class NotificationService {
             }
         });
 
-        const subscriptions = users.map((user: { subscriptions: any[]; }) => user.subscriptions[0]);
+        const subscriptions = users.map((user) => user.subscriptions[0]);
 
         for (const subscription of subscriptions) {
             console.log(subscription);
