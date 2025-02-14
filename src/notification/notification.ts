@@ -31,21 +31,10 @@ export default class NotificationService {
         const fiveDaysLater = new Date();
         fiveDaysLater.setDate(currentDate.getDate() + 5);
 
-        const users = await this.prisma.user.findMany({
-            include: {
-                subscriptions: {
-                    orderBy: {
-                        expiredAt: 'desc'
-                    },
-                    take: 1
-                }
-            }
-        });
-
-        const subscriptions = users.map((user) => user.subscriptions[0]);
+        const subscriptions = await this.getUsersWithActualSubscription();
 
         for (const subscription of subscriptions) {
-            if (!subscription || subscription.expiredAt >= fiveDaysLater || subscription.expiredAt <= currentDate || subscription.expireSoonSent) continue;
+            if (subscription.expiredAt >= fiveDaysLater || subscription.expiredAt <= currentDate || subscription.expireSoonSent) continue;
             await this.bot.api.sendMessage(
               subscription.userId,
               'Ваша подписка истекает через 5 дней. Вы можете продлить её прямо сейчас, чтобы не потерять доступ к продуктам Adobe\n'
@@ -60,6 +49,22 @@ export default class NotificationService {
     async notifyExpired(): Promise<void> {
         const currentDate = new Date();
 
+        const subscriptions = await this.getUsersWithActualSubscription();
+
+        for (const subscription of subscriptions) {
+            if (subscription.expiredAt > currentDate || subscription.expireSent) continue;
+            await this.bot.api.sendMessage(
+                subscription.userId,
+                'Ваша подписка закончилась. Не теряйте доступ к Adobe! Продлите её прямо сейчас.'
+            );
+            await this.prisma.subscription.update({
+                where: { approveId: subscription.approveId },
+                data: { expireSent: true }
+            })
+        }
+    }
+
+    private async getUsersWithActualSubscription() {
         const users = await this.prisma.user.findMany({
             include: {
                 subscriptions: {
@@ -71,18 +76,6 @@ export default class NotificationService {
             }
         });
 
-        const subscriptions = users.map((user) => user.subscriptions[0]);
-
-        for (const subscription of subscriptions) {
-            if (!subscription || subscription.expiredAt > currentDate || subscription.expireSent) continue;
-            await this.bot.api.sendMessage(
-                subscription.userId,
-                'Ваша подписка закончилась. Не теряйте доступ к Adobe! Продлите её прямо сейчас.'
-            );
-            await this.prisma.subscription.update({
-                where: { approveId: subscription.approveId },
-                data: { expireSent: true }
-            })
-        }
+        return users.map((user) => user.subscriptions[0]).filter((subscription) => subscription !== undefined);
     }
 }
