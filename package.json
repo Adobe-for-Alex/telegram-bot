@@ -9,6 +9,7 @@
     "prisma:migrate:new": "prisma migrate dev --create-only",
     "prisma:migrate:apply": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "pretest": "prisma generate",
     "test": "jest",
     "dev:up": "docker compose up -d",
     "dev": "pnpm dev:up && docker compose attach bot",
@@ -39,6 +40,7 @@
     "knuth-shuffle-seeded": "^1.0.6",
     "node-cron": "^3.0.3",
     "only-allow": "^1.2.1",
-    "prisma": "^5.21.1"
+    "prisma": "^5.21.1",
+    "prisma-mock": "^0.10.3"
   }
 }
